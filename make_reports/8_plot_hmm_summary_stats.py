@@ -15,28 +15,17 @@ os.chdir(Path("/home/carinaf"))
 
 base_dir = os.getcwd()
 
-n_states = 6
+n_states = 8
 
-small_sample=True
-fitted_on_our_data = False
-
-if small_sample & fitted_on_our_data:
-    hmm_dir = Path(f'{base_dir}/tms_mdd/prepared_data_40patients_1Hz/fitted_models/model_fitted_allsessions')
-    csv_path = Path(f"{hmm_dir}/hmm_demo_quest_allsessions_{n_states}.csv")
-elif small_sample:
-    hmm_dir = Path(f'{base_dir}/tms_mdd/prepared_data_clean_giles_newmodel')
-    csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
-else:
-    # where are the HMM summary stats stored
-    hmm_dir = Path(f'{base_dir}/tms_mdd/prepared_data_allpatients_upto209')
-    csv_path = Path(f"{hmm_dir}/hmm_demo_quest_80patients_{n_states}.csv")
+hmm_dir = Path(f'{base_dir}/tms_mdd/prepared_data_80patients_giles_newmodel')
+csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
 
 save_path = f'{hmm_dir}/tms_mdd/{n_states}_allsessions_plots'
 
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 
-results = run_complete_analysis(csv_path, n_states=n_states, save_plots=False)
+#results = run_complete_analysis(csv_path, n_states=n_states, save_plots=False)
 
 #df = load_and_prep_data(csv_path)
 #correlations = plot_hads_fo_correlations(df, save_plots=True)
