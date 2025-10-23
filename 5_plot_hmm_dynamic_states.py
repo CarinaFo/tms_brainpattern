@@ -1,13 +1,17 @@
 """Plot group-average HMM networks.
 
 """
-# Run in osld_tf environment
+# Run in osld_tf environment on lucky 3 
+# or osld environment on windows
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import pickle
 import seaborn as sns
+
+system='windows'
 
 plot_psds = True
 plot_pow_maps = True
@@ -16,13 +20,18 @@ plot_coh_maps = False
 plot_pow_vs_coh = True
 plot_trans_prob = True
 plot_sum_stats = True
-plot_state_time_course = False
+plot_state_time_course = True
 
-# set working directory
-os.chdir(Path('/home/carinaf/tms_mdd'))
+if system == 'lucky3':
+    # set working directory
+    base_dir = Path('/home/carinaf/tms_mdd')
+elif system == 'windows':
+    # Windows home dir
+    base_dir = Path("L:/Lab_LucaC/Carina/")
+else:
+    "No system path defined *windows* or *lucky3*"
 
-basedir = os.getcwd()
-save_dir = Path(f'{basedir}/57patients_newmodels_giles_plots')
+save_dir = Path(f'{base_dir}/80patients_newmodels_giles_plots')
 
 # Source reconstruction files
 mask_file = "MNI152_T1_8mm_brain.nii.gz"
@@ -30,8 +39,8 @@ parcellation_file = "fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii
 
 # New order for states
 #order = [3, 5, 7, 0, 1, 6, 9, 8, 4, 2] # Chet reordered based on power
-n_states = [6]
-n_sessions = 6
+n_states = [8]
+n_sessions = 1
 
 for state in n_states:
     save_dir_plots = f'{save_dir}/plots_{state}'
@@ -45,11 +54,11 @@ for state in n_states:
             from osl_dynamics.utils import plotting
 
             plotting.set_style({
-                "axes.labelsize": 20,
+                "axes.labelsize": 18,
                 "xtick.labelsize": 18,
                 "ytick.labelsize": 18,
-                "legend.fontsize": 28,
-                "lines.linewidth": 6,
+                "legend.fontsize": 22,
+                "lines.linewidth": 10,
             })
 
             # Load data
@@ -74,14 +83,14 @@ for state in n_states:
                     x_label="Frequency (Hz)",
                     y_label="PSD (a.u.)",
                     x_range=[f[0], f[-1]],
-                    y_range=[0, 0.4],
+                    y_range=[0, 0.5],
                     plot_kwargs={"color": "black", "linestyle": "--"},
                     fig_kwargs={"figsize": (4, 6)} 
                 )
                 ax.plot(f, p[i], color=colors[i]) #*wb_comp[0,:]
-                ax.set_yticks([0, 0.2, 0.4])
+                ax.set_yticks([0, 0.25, 0.5])
                 plt.show()
-                plotting.save(fig, f"{save_dir_plots}/psd_{i:02d}_{state}_{ses}.svg", 
+                plotting.save(fig, f"{save_dir_plots}/psd_{i:02d}_{ses}.svg", 
                 tight_layout=True)
 
         if plot_pow_maps:
@@ -89,9 +98,9 @@ for state in n_states:
             from osl_dynamics.utils import plotting
 
             plotting.set_style({
-                "axes.labelsize": 16,
-                "xtick.labelsize": 16,
-                "ytick.labelsize": 16,
+                "axes.labelsize": 18,
+                "xtick.labelsize": 18,
+                "ytick.labelsize": 18,
             })
 
             # Load data
@@ -112,7 +121,7 @@ for state in n_states:
                 parcellation_file=parcellation_file,
                 subtract_mean=True,
                 mean_weights=gfo,
-                plot_kwargs={'hemispheres': ['left'], 'views': ['lateral']}, #'vmin': -0.02,  'vmax': 0.05, 
+                #plot_kwargs={'hemispheres': ['left'], 'views': ['lateral'], 'cbar_tick_format': '%.2f'},
                 #'cmap': 'coolwarm'}, #'PuOr'
                 filename=f"{save_dir_plots}/pow_{ses}.png",
                 component=0
@@ -123,9 +132,9 @@ for state in n_states:
             from osl_dynamics.utils import plotting
 
             plotting.set_style({
-                "axes.labelsize": 14,
-                "xtick.labelsize": 14,
-                "ytick.labelsize": 14,
+                "axes.labelsize": 18,
+                "xtick.labelsize": 18,
+                "ytick.labelsize": 18,
             })
 
             # Load data
@@ -147,8 +156,8 @@ for state in n_states:
             connectivity.save(
                 c,
                 parcellation_file=parcellation_file,
-                plot_kwargs={"display_mode": "z", "annotate": False, 'edge_cmap': 'coolwarm'},  # ← Ensures two decimal places},
-                filename=f"{save_dir_plots}/coh_{ses}.png",
+                plot_kwargs={"display_mode": "z", "annotate": False, 'edge_cmap': 'coolwarm', 'colorbar': False},  
+                filename=f"{save_dir_plots}/coh_{ses}.svg",
                 component=0
             )
 
@@ -157,9 +166,9 @@ for state in n_states:
             from osl_dynamics.utils import plotting
 
             plotting.set_style({
-                "axes.labelsize": 16,
-                "xtick.labelsize": 16,
-                "ytick.labelsize": 16,
+                "axes.labelsize": 14,
+                "xtick.labelsize": 14,
+                "ytick.labelsize": 14,
             })
 
             # Load data
@@ -191,9 +200,9 @@ for state in n_states:
             from osl_dynamics.utils import plotting
 
             plotting.set_style({
-                "axes.labelsize": 16,
-                "xtick.labelsize": 16,
-                "ytick.labelsize": 16,
+                "axes.labelsize": 14,
+                "xtick.labelsize": 14,
+                "ytick.labelsize": 14,
                 "legend.fontsize": 12,
             })
 
@@ -243,56 +252,83 @@ for state in n_states:
             from mpl_toolkits.axes_grid1 import make_axes_locatable
 
             # Load data
-            tp = np.load(f"{save_dir}/tp_{ses}_{state}.npy")[0]
-            #tp = tp[np.ix_(order, order)]
+            tp = np.load(f"{save_dir}/tp_{ses}_{state}.npy")
+            tp_mean = tp.mean(axis=0)
 
             # Extract the diagonal
-            diag = np.diag(tp.copy())
-            np.fill_diagonal(tp, 0)
+            diag = np.diag(tp_mean.copy())
 
-            # Plot off diagonals
-            fig, ax = plt.subplots()
+            # Mask the diagonal for off-diagonal plot
+            tp_masked = tp_mean.copy()
+            np.fill_diagonal(tp_masked, np.nan)
 
-            im = ax.matshow(tp)
+            # Define state labels (1 to 8)
+            states = np.arange(1, 9)
 
+            # ---------- Plot off-diagonal ----------
+            fig, ax = plt.subplots(figsize=(7, 6))
+
+            # Plot off-diagonal transitions
+            im = ax.matshow(tp_masked, cmap="viridis", vmin=np.nanmin(tp_masked), vmax=np.nanmax(tp_masked))
+
+            # Overlay grey squares for diagonal cells
+            for i in range(len(states)):
+                ax.add_patch(plt.Rectangle((i - 0.5, i - 0.5), 1, 1, color="lightgrey", zorder=2))
+
+            # Colorbar
             divider = make_axes_locatable(ax)
             cax = divider.append_axes("right", size="5%", pad=0.05)
             fig.colorbar(im, cax=cax, orientation="vertical")
-            cax.tick_params(labelsize=17)
+            cax.tick_params(labelsize=18)
 
-            ax.tick_params(labelsize=17)
-            ax.set_xlabel("State: To", fontsize=18)
-            ax.set_ylabel("State: From", fontsize=18)
+            # Axis labels and ticks
+            ax.tick_params(labelsize=18)
+            ax.set_xticks(np.arange(len(states)))
+            ax.set_yticks(np.arange(len(states)))
+            ax.set_xticklabels(states)
+            ax.set_yticklabels(states)
             ax.xaxis.set_label_position("top")
+            ax.set_xlabel("Next State", fontsize=22)
+            ax.set_ylabel("Current State", fontsize=22)
+            ax.set_title("Transition Probability Matrix", fontsize=22, pad=20)
 
-            plt.savefig(f"{save_dir_plots}/trans_prob_{ses}_{state}.png")
+            plt.tight_layout()
+            plt.savefig(f"{save_dir_plots}/trans_prob_{ses}_{state}.svg")
+            plt.show()
             plt.close()
 
-            # Plot the diagonal
-            fig, ax = plt.subplots(figsize=(4,8))
 
-            im = ax.matshow(diag[:, np.newaxis])
+            # ---------- Plot diagonal (self transitions) ----------
+            fig, ax = plt.subplots(figsize=(4, 8))
+
+            # Plot diagonal as a single-column heatmap
+            im = ax.matshow(diag[:, np.newaxis], cmap="Greys")
 
             divider = make_axes_locatable(ax)
             cax = divider.append_axes("right", size="50%", pad=0.25)
             fig.colorbar(im, cax=cax, orientation="vertical")
-            cax.tick_params(labelsize=24)
+            cax.tick_params(labelsize=18)
 
-            ax.set_xticklabels([""])
-            ax.set_yticklabels([""] + ["1", "3", "5", "7", "9"])
-            ax.tick_params(labelsize=24)
-            ax.set_ylabel("State", fontsize=24)
+            ax.set_xticks([0])
+            ax.set_xticklabels(["Self"])
+            ax.set_yticks(np.arange(len(states)))
+            ax.set_yticklabels(states)
+            ax.tick_params(labelsize=18)
+            ax.set_ylabel("State", fontsize=22)
+            ax.set_title("Self-Transitions", fontsize=22, pad=20)
 
-            plt.savefig(f"{save_dir_plots}/trans_prob_diag_{ses}_{state}.png")
+            plt.tight_layout()
+            plt.savefig(f"{save_dir_plots}/trans_prob_diag_{ses}_{state}.svg")
+            plt.show()
             plt.close()
 
         if plot_sum_stats:
             from osl_dynamics.utils import plotting
 
             plotting.set_style({
-                "axes.labelsize": 16,
-                "xtick.labelsize": 14,
-                "ytick.labelsize": 14,
+                "axes.labelsize": 18,
+                "xtick.labelsize": 18,
+                "ytick.labelsize": 18,
             })
 
                 # Load
@@ -319,8 +355,8 @@ for state in n_states:
                 )
 
             # Plot the distribution of fractional occupancy (FO) across subjects
-            plotting.plot_violin(fo.T, x_label="State", y_label="FO", sns_kwargs={'palette': colors},
-                                filename=f"{save_dir_plots}/fo_{ses}_{state}.svg")
+            plotting.plot_violin(sr.T, x_label="HMM State", y_label="Switch Rate", sns_kwargs={'palette': colors},
+                                filename=f"{save_dir_plots}/sr_{ses}_{state}.svg")
 
 
         if plot_state_time_course:
@@ -331,16 +367,27 @@ for state in n_states:
             from matplotlib import cm
             from matplotlib.colors import to_hex
 
+            # Version incompatibility fix
+            import sys
+            # Temporary alias for compatibility with old pickles
+            sys.modules['numpy._core'] = np
+            sys.modules['numpy._core.multiarray'] = np.core.multiarray
+            sys.modules['numpy._core.numeric'] = np.core.numeric
+
+            import pickle
+
             # load stc
             stc = pickle.load(open(f"{save_dir}/states_{ses}_{state}.pkl", 'rb'))
             # Calculate a state time course by taking the most likely state
             stc = modes.argmax_time_courses(stc)
+            import random
+            indices = random.sample(range(0, 40), 10)
 
             if state == 12:
-                for idx, s in enumerate(stc):
-                    plotting.plot_alpha(s, cmap='tab20',
-                    filename=f"{save_dir_plots}/stc_{idx}_{ses}_{state}.png")
+                for idx in indices:
+                    plotting.plot_alpha(stc[idx], cmap='tab20',
+                    filename=f"{save_dir_plots}/stc_{idx}_{ses}_{state}.svg")
             else:
-                for idx, s in enumerate(stc):
-                    plotting.plot_alpha(s,
-                    filename=f"{save_dir_plots}/stc_{idx}_{ses}_{state}.png")
+                for idx in indices:
+                    plotting.plot_alpha(stc[idx], cmap='tab20',
+                    filename=f"{save_dir_plots}/stc_{idx}_{ses}_{state}.svg")
