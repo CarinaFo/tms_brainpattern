@@ -23,7 +23,7 @@ csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
 fig_dir = Path(f'{hmm_dir}/figures')
 
 
-plot_pc_vs_symptom_change()
+#plot_pc_vs_symptom_change()
 
 # --------------------------------------------------
 # Data loading & preprocessing
@@ -352,7 +352,7 @@ def plot_symptom_change_correlation(df, pc, sess_label, beta, pval):
     )
 
     plt.tight_layout()
-    plt.savefig('PC2_hmmsummarystats.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{fig_dir}/PC2_deltahads.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 
