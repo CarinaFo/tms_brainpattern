@@ -287,7 +287,7 @@ def plot_pc_tms_vs_symptom_change(
     results = []
 
     for row, pc in enumerate(['PC1_change', 'PC2_change']):
-        for col, (sess_change, sess_label) in enumerate(zip([1, 2], ["Session 1–2", "Session 2–3"])):
+        for col, (sess_change, sess_label) in enumerate(zip([1, 2], ["Session 1", "Session 2"])):
             df_s = df_merge[df_merge['session'] == sess_change].dropna(subset=['symptom_change'])
 
             # Design matrix
