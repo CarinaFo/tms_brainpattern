@@ -442,5 +442,5 @@ def plot_symptom_change_correlation(df, pc, sess_label, beta, pval):
     )
 
     plt.tight_layout()
-    plt.savefig('PC2_hmmsummarystats.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{fig_dir}/PC2_delta_hads_tp.png', dpi=300, bbox_inches='tight')
     plt.show()
