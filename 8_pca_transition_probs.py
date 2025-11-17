@@ -75,6 +75,9 @@ def run_PCA_on_transition_matrix(n_sessions: int = 6,
 
     print(f"Analyzing {len(patients)} patients after exclusion")
 
+    # save transition probabilities to disk
+    np.save('transition_probs.npy', transitions)
+
     # Continue with reshaping
     n_sessions = transitions.shape[0]
     n_patients = transitions.shape[1]
