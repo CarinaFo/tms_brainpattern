@@ -16,12 +16,11 @@ import matplotlib.pyplot as plt
 # Configuration
 # --------------------------------------------------
 home_dir = Path("L:/Lab_LucaC/Carina/")
-n_states = 8
+n_states = 12
 
 hmm_dir = Path(f"{home_dir}/prepared_data_80patients_giles_newmodel")
 csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
 fig_dir = Path(f'{hmm_dir}/figures')
-
 
 #plot_pc_vs_symptom_change()
 
@@ -33,12 +32,20 @@ def load_and_prep_data(csv_path, n_states=n_states, exclude_repeater: bool = Tru
     # read csv file containing clinical and hmm data
     df = pd.read_csv(csv_path)
 
+    unique_ids = pd.unique(df.patient)
+
     # exclude repeater IDs and very noisy IDs
     exclude_ids = [ "127", "182"]
+    removed_ids = [list(unique_ids).index(i) for i in exclude_ids]
+
     df = df[~df["patient"].isin(exclude_ids)]
     if exclude_repeater:
+        repeater_ids = [i for i in unique_ids if "R" in str(i)]
+        repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
         df = df[~df["patient"].str.contains("R")]
 
+    drop_indices = removed_ids + repeater_positions
+    
     print(f"Analyzing {df['patient'].nunique()} patients")
 
     df["state"] = df["state"] + 1  # we want states starting from 1
@@ -65,7 +72,7 @@ def run_PCA():
 
     df = load_and_prep_data(csv_path, 8, True)
 
-    metrics = ['fo', 'lt', 'sr', 'intv']
+    metrics = ['fo'] #, 'lt', 'sr', 'intv']
 
     # Pivot: one row per patient/session/tms, columns = state × metric
     df_wide = df.pivot_table(
@@ -103,7 +110,7 @@ def run_PCA():
     plot_variance_explained(explained)
 
     # plot PC loadings
-    plot_loadings(pca, feature_cols, feature_names, 'PC1')
+    plot_loadings(pca, feature_cols, feature_names, 'PC2')
 
     # save the first 3 PCAs
     pca_df = pd.DataFrame(X_pca[:, :3], columns=[f"PC{i+1}" for i in range(3)])
@@ -124,7 +131,7 @@ def run_PCA():
 
     # does PC predict hads score in session 1
     df_sess1_pre = df_clean.query("session == 1 and tms == 'pre'")
-    model = smf.ols("PC2 ~ dep_hads + age + gender_3 + years_with_depression", data=df_sess1_pre).fit()
+    model = smf.ols("PC2 ~ dep_hads +  age + gender_3 + years_with_depression", data=df_sess1_pre).fit()
     print(model.summary())
 
     # plot quick regression plot
@@ -132,7 +139,7 @@ def run_PCA():
         data=df_sess1_pre,
         x='dep_hads', y='PC2'
     )
-    plt.xlabel("HADS Depression (Session 1 Pre-TMS)")
+    plt.xlabel("HADS (Session 1 Pre-TMS)")
     plt.ylabel("PC2 (Session 1 Pre-TMS)")
     plt.tight_layout()
     plt.show()
@@ -179,13 +186,14 @@ def plot_pc_vs_symptom_change(
     sym_wide = df.pivot_table(index='patient', columns='session', values=symptom_col).reset_index()
     sym_wide['sym_change_s1_s2'] = sym_wide[1] - sym_wide[2]
     sym_wide['sym_change_s2_s3'] = sym_wide[2] - sym_wide[3]
-
+    
     sym_change = sym_wide.melt(
         id_vars='patient',
         value_vars=['sym_change_s1_s2', 'sym_change_s2_s3'],
         var_name='session_change',
         value_name='symptom_change'
     )
+
     sym_change['session'] = sym_change['session_change'].str.extract(r's(\d)_s\d').astype(int)
 
     # --- Merge ---
