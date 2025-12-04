@@ -83,6 +83,11 @@ def run_PCA_on_transition_matrix(n_sessions: int = 6,
     n_patients = transitions.shape[1]
     n_states = transitions.shape[2]
 
+    # load asymmetry matrix
+    #asym_matrix = np.load(r"L:\Lab_LucaC\Carina\asym_matrix_8states.npy")
+
+    #X = asym_matrix.reshape(n_states * n_states, 402).T
+
     X = transitions.reshape(n_sessions * n_patients, n_states * n_states)
 
     # Get only off-diagonal elements (self transition are much larger)
@@ -208,8 +213,9 @@ def add_PCA_to_data(n_states: int = None):
     df['years_with_depression'] = df['age'] - df['age_of_diagnosis']
 
     # does PC predict hads score in session 1
-    df_sess1_pre = df.query("session == 1 and tms == 'pre'")
-    model = smf.ols("PC1 ~ dep_hads + age + gender_3 + years_with_depression", data=df_sess1_pre).fit()
+    df_sess1_pre = df[(df["session"] == 1) & (df["tms"] == "pre")]
+
+    model = smf.ols("PC1 ~ dep_hads", data=df_sess1_pre).fit()
     print(model.summary())
 
     model = smf.ols("PC2 ~ dep_hads + age + gender_3 + years_with_depression", data=df_sess1_pre).fit()
@@ -312,7 +318,7 @@ def plot_pc_tms_vs_symptom_change(
                 'n': len(df_s)
             })
 
-    plot_symptom_change_correlation(df_s, pc, sess_label, beta, pval)
+        plot_symptom_change_correlation(df_s, pc, sess_label, beta, pval)
 
     results_df = pd.DataFrame(results)
 
