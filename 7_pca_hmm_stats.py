@@ -1,5 +1,4 @@
 # Run PCA on HMM summary statistics and relate them to symptom changes
-
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import pandas as pd
@@ -12,22 +11,17 @@ from pathlib import Path
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# --------------------------------------------------
-# Configuration
-# --------------------------------------------------
+# setup paths
 home_dir = Path("L:/Lab_LucaC/Carina/")
-n_states = 12
 
+n_states = 8
 hmm_dir = Path(f"{home_dir}/prepared_data_80patients_giles_newmodel")
 csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
 fig_dir = Path(f'{hmm_dir}/figures')
 
-#plot_pc_vs_symptom_change()
+plot_pc_vs_symptom_change(n_states)
 
-# --------------------------------------------------
-# Data loading & preprocessing
-# --------------------------------------------------
-def load_and_prep_data(csv_path, n_states=n_states, exclude_repeater: bool = True):
+def load_and_prep_data(csv_path, n_states, exclude_repeater: bool = True):
     
     # read csv file containing clinical and hmm data
     df = pd.read_csv(csv_path)
@@ -45,7 +39,7 @@ def load_and_prep_data(csv_path, n_states=n_states, exclude_repeater: bool = Tru
         df = df[~df["patient"].str.contains("R")]
 
     drop_indices = removed_ids + repeater_positions
-    
+
     print(f"Analyzing {df['patient'].nunique()} patients")
 
     df["state"] = df["state"] + 1  # we want states starting from 1
@@ -68,9 +62,9 @@ def load_and_prep_data(csv_path, n_states=n_states, exclude_repeater: bool = Tru
     return df
 
 
-def run_PCA():
+def run_PCA(n_states):
 
-    df = load_and_prep_data(csv_path, 8, True)
+    df = load_and_prep_data(csv_path, n_states, True)
 
     metrics = ['fo'] #, 'lt', 'sr', 'intv']
 
@@ -131,7 +125,7 @@ def run_PCA():
 
     # does PC predict hads score in session 1
     df_sess1_pre = df_clean.query("session == 1 and tms == 'pre'")
-    model = smf.ols("PC2 ~ dep_hads +  age + gender_3 + years_with_depression", data=df_sess1_pre).fit()
+    model = smf.ols("PC1 ~ dep_hads +  age + gender_3 + years_with_depression", data=df_sess1_pre).fit()
     print(model.summary())
 
     # plot quick regression plot
@@ -158,7 +152,7 @@ def run_PCA():
     return df_clean
 
 
-def plot_pc_vs_symptom_change(
+def plot_pc_vs_symptom_change(n_states: int,
     symptom_col='dep_hads', 
     control_vars=['age', 'gender_3']
 ):
@@ -168,10 +162,12 @@ def plot_pc_vs_symptom_change(
     Produces separate regression plots for PC1 and PC2.
     """
 
-    df = run_PCA()
+    df = run_PCA(n_states)
 
     # --- Data prep ---
     df['session'] = df['session'].astype(int)
+
+    #df = df[((df['group'] == 1) | (df['group'] == 2))]
 
     # Function to compute Δ pre–post
     def compute_change(df, var):
@@ -213,9 +209,10 @@ def plot_pc_vs_symptom_change(
         for col, (sess_change, sess_label) in enumerate(zip([1, 2], ["Session 1", "Session 2"])):
             df_s = df_merge[df_merge['session'] == sess_change].dropna(subset=['symptom_change'])
 
-            # Design matrix
             X = df_s[[pc] + control_vars].copy()
             X = pd.get_dummies(X, drop_first=True)
+            # OLS doesn't like boolean
+            X = X.replace({True: 1, False: 0})
             X = sm.add_constant(X)
             y = df_s['symptom_change']
 
