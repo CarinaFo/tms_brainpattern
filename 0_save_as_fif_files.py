@@ -1,6 +1,8 @@
 # load EEG brainvision files and save as .fif files for further analysis
 # make sure to load the channel layout template .xyz file with the corrdinates
 
+# run in MNE_TMSMDD environment
+
 import mne
 from pathlib import Path
 import numpy as np
