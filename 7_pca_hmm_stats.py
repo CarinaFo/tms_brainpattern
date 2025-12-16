@@ -6,6 +6,7 @@ import numpy as np
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
 from pathlib import Path
+import os
 
 #plotting
 import seaborn as sns
@@ -14,46 +15,48 @@ import matplotlib.pyplot as plt
 # setup paths
 home_dir = Path("L:/Lab_LucaC/Carina/")
 
-n_states = 8
-hmm_dir = Path(f"{home_dir}/prepared_data_80patients_giles_newmodel")
-csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
+hmm_dir = Path(f"{home_dir}/prepared_giles_filtered3Hz")
 fig_dir = Path(f'{hmm_dir}/figures')
+
+if not fig_dir.exists():
+    os.makedirs(fig_dir, exist_ok=True)
 
 plot_pc_vs_symptom_change(n_states)
 
-def load_and_prep_data(csv_path, n_states, exclude_repeater: bool = True):
+def load_and_prep_data(n_states, exclude_repeater: bool = False):
     
+    csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
+
     # read csv file containing clinical and hmm data
     df = pd.read_csv(csv_path)
 
     unique_ids = pd.unique(df.patient)
 
+    print(unique_ids)
+
     # exclude repeater IDs and very noisy IDs
-    exclude_ids = [ "127", "182"]
-    removed_ids = [list(unique_ids).index(i) for i in exclude_ids]
+    exclude_ids = [ "127", '159', "182", '215']
+    #removed_ids = [list(unique_ids).index(i) for i in exclude_ids]
 
     df = df[~df["patient"].isin(exclude_ids)]
     if exclude_repeater:
-        repeater_ids = [i for i in unique_ids if "R" in str(i)]
-        repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
+        #repeater_ids = [i for i in unique_ids if "R" in str(i)]
+        #repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
         df = df[~df["patient"].str.contains("R")]
 
-    drop_indices = removed_ids + repeater_positions
+    #drop_indices = removed_ids + repeater_positions
 
     print(f"Analyzing {df['patient'].nunique()} patients")
 
     df["state"] = df["state"] + 1  # we want states starting from 1
 
     # fill in demographic variables
-    for col in ["age", "gender", "responder", "group"]:
+    for col in ["age", "gender", 'responder', 'group', 'years_with_depression']:
         df[col] = df.groupby("patient")[col].transform("first")
 
     # transform to categorical
-    for col in ["patient", "session", "tms", "state", "group", "responder"]:
+    for col in ["patient", "session", "tms", "state", 'responder', 'group', 'gender']:
         df[col] = df[col].astype("category", errors="ignore")
-
-    # create new column
-    df['years_with_depression'] = df['age'] - df['age_of_diagnosis']
 
     plot_symptom_change(df)
 
@@ -64,7 +67,7 @@ def load_and_prep_data(csv_path, n_states, exclude_repeater: bool = True):
 
 def run_PCA(n_states):
 
-    df = load_and_prep_data(csv_path, n_states, True)
+    df = load_and_prep_data(8, False)
 
     metrics = ['fo'] #, 'lt', 'sr', 'intv']
 
@@ -125,22 +128,30 @@ def run_PCA(n_states):
 
     # does PC predict hads score in session 1
     df_sess1_pre = df_clean.query("session == 1 and tms == 'pre'")
-    model = smf.ols("PC1 ~ dep_hads +  age + gender_3 + years_with_depression", data=df_sess1_pre).fit()
+    model = smf.ols("PC2 ~ hads_dep_total + group + age + gender + years_with_depression", data=df_sess1_pre).fit()
+    print(model.summary())
+
+    model = smf.ols("PC2 ~ hads_dep_total * group + age + gender + years_with_depression", data=df_sess1_pre).fit()
     print(model.summary())
 
     # plot quick regression plot
     sns.regplot(
         data=df_sess1_pre,
-        x='dep_hads', y='PC2'
+        x='hads_dep_total', y='PC2'
     )
     plt.xlabel("HADS (Session 1 Pre-TMS)")
     plt.ylabel("PC2 (Session 1 Pre-TMS)")
     plt.tight_layout()
     plt.show()
+    
+    # does PC predict hads score in session 1
+    df_sess1_pre = df_clean.query("session == 1 and tms == 'pre'")
+    model = smf.ols("PC1 ~ hads_dep_total +  age + gender + years_with_depression", data=df_sess1_pre).fit()
+    print(model.summary())
 
     sns.regplot(
         data=df_sess1_pre,
-        x='dep_hads', y='PC1'
+        x='hads_dep_total', y='PC1'
     )
     plt.xlabel("HADS Depression (Session 1 Pre-TMS)")
     plt.ylabel("PC1 (Session 1 Pre-TMS)")
@@ -148,13 +159,96 @@ def run_PCA(n_states):
     plt.show()
 
     # PC2 caries some meaningful variation
+    model = smf.mixedlm(
+        "hads_dep_total ~ session*group",
+        df_clean,
+        groups=df_clean["patient"]
+    ).fit()
+
+    model.summary()
+
+    plt.figure(figsize=(6, 4))
+
+    for grp, d in df_clean.groupby('group'):
+        mean_d = d.groupby('session')['hads_dep_total'].median().reindex([1,2,3])
+
+        plt.plot(
+            mean_d.index,
+            mean_d.values,
+            marker='o',
+            linewidth=2,
+            label=f'Group {grp}'
+        )
+
+    plt.xlabel('Session')
+    plt.xticks([1, 2, 3])
+    plt.ylabel('Mean HADS-D (pre-TMS)')
+    plt.legend(title='Group')
+    plt.tight_layout()
+    plt.show()
+
+    df_pre = df_clean.query("tms == 'pre'")
+    model = smf.mixedlm(
+        "PC2 ~ session*group + group*tms",
+        df_clean,
+        groups=df_clean["patient"]
+    ).fit()
+
+    # keep only PC2, session, group, patient, tms
+    df_pp = df_clean[['patient', 'group', 'session', 'tms', 'PC2']].copy()
+
+    # pivot pre/post within subject & session
+    wide = (
+        df_pp
+        .pivot_table(
+            index=['patient', 'group', 'session'],
+            columns='tms',
+            values='PC2'
+        )
+        .reset_index()
+    )
+
+    # compute pre - post difference
+    wide['PC2_diff'] = wide['pre'] - wide['post']
+
+    # drop rows where diff can't be computed
+    wide = wide.dropna(subset=['PC2_diff'])
+        
+    plt.figure(figsize=(6, 4))
+
+    # ensure session is discrete and ordered
+    wide['session'] = wide['session'].astype(int)
+
+    for grp, d in wide.groupby('group'):
+        mean_d = (
+            d.groupby('session')['PC2_diff']
+            .mean()
+            .reindex([1, 2, 3])  # enforce discrete order
+        )
+
+        plt.plot(
+            mean_d.index,
+            mean_d.values,
+            marker='o',
+            linewidth=2,
+            label=f'Group {grp}'
+        )
+
+    plt.axhline(0, linestyle='--', linewidth=1)
+    plt.xlabel('Session')
+    plt.ylabel('Mean PC2 (pre − post)')
+    plt.title('Mean pre–post PC2 change by session (raw data)')
+    plt.xticks([1, 2, 3])
+    plt.legend(title='Group')
+    plt.tight_layout()
+    plt.show()
 
     return df_clean
 
 
 def plot_pc_vs_symptom_change(n_states: int,
-    symptom_col='dep_hads', 
-    control_vars=['age', 'gender_3']
+    symptom_col='hads_dep_total', 
+    control_vars=['age', 'gender', 'group']
 ):
     """
     Test whether TMS-induced PC1/PC2 changes predict symptom change (ΔHADS-D)
@@ -166,8 +260,6 @@ def plot_pc_vs_symptom_change(n_states: int,
 
     # --- Data prep ---
     df['session'] = df['session'].astype(int)
-
-    #df = df[((df['group'] == 1) | (df['group'] == 2))]
 
     # Function to compute Δ pre–post
     def compute_change(df, var):
@@ -204,7 +296,8 @@ def plot_pc_vs_symptom_change(n_states: int,
 
     # --- Regression & plotting ---
     results = []
-  
+    models = []
+
     for row, pc in enumerate(['PC1_change', 'PC2_change']):
         for col, (sess_change, sess_label) in enumerate(zip([1, 2], ["Session 1", "Session 2"])):
             df_s = df_merge[df_merge['session'] == sess_change].dropna(subset=['symptom_change'])
@@ -218,9 +311,11 @@ def plot_pc_vs_symptom_change(n_states: int,
 
             model = sm.OLS(y, X).fit()
 
+            models.append(model)
+
             beta = model.params.get(pc, np.nan)
             pval = model.pvalues.get(pc, np.nan)
-
+   
             results.append({
                 'session': sess_label,
                 'predictor': pc,
@@ -367,15 +462,15 @@ def plot_symptom_change(df):
     wide = df.pivot_table(
         index=['patient', 'responder'],
         columns='session',
-        values=['dep_hads', 'anxiety_hads', 'madrs_score', 'hama_score']
+        values=['hads_dep_total', 'hads_anx_total', 'madrs_total', 'hama_total']
     )
 
     # compute deltas (absolute difference)
     diff = pd.DataFrame({
-        'hads_dep': (wide['dep_hads'][1] - wide['dep_hads'][3]),
-        'hads_anx': (wide['anxiety_hads'][1] - wide['anxiety_hads'][3]),
-        'madrs': (wide['madrs_score'][1] - wide['madrs_score'][3]),
-        'hama': (wide['hama_score'][1] - wide['hama_score'][3]),
+        'hads_dep': (wide['hads_dep_total'][1] - wide['hads_dep_total'][3]),
+        'hads_anx': (wide['hads_anx_total'][1] - wide['hads_anx_total'][3]),
+        'madrs': (wide['madrs_total'][1] - wide['madrs_total'][3]),
+        'hama': (wide['hama_total'][1] - wide['hama_total'][3]),
     }).reset_index()
 
     # Melt to long format for plotting
