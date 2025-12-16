@@ -23,14 +23,16 @@ import statsmodels.api as sm
 # --------------------------------------------------
 home_dir = Path("L:/Lab_LucaC/Carina/")
 
-tp_dir = Path(f"{home_dir}/80patients_newmodels_giles_plots")
-hmm_dir = Path(f"{home_dir}/prepared_data_80patients_giles_newmodel")
+tp_dir = Path(f"{home_dir}/plots_giles_filtered3Hz")
+hmm_dir = Path(f"{home_dir}/prepared_giles_filtered3Hz")
 
 fig_dir = Path(f'{hmm_dir}/figures')
 
-def run_PCA_on_transition_matrix(n_sessions: int = 6, 
-                                    exclude_repeater: bool =True, 
-                                    n_states: int = None):
+n_states = 8 
+
+def run_PCA_on_transition_matrix(n_sessions: int, 
+                                    exclude_repeater: bool, 
+                                    n_states: int):
     '''fit PCA on transition probability matrix obtained from HMM'''
     all_ses = []
 
@@ -48,7 +50,7 @@ def run_PCA_on_transition_matrix(n_sessions: int = 6,
     patients = pd.unique(idlist['patient_id'])
 
     # exclude repeater IDs and very noisy IDs
-    exclude_ids = ["127", "182"]
+    exclude_ids = ["127", "182", '159', '215']
 
     if exclude_repeater:
         exclude_ids += [pid for pid in patients if "R" in pid]
@@ -63,11 +65,13 @@ def run_PCA_on_transition_matrix(n_sessions: int = 6,
     # one patient has no clinical data but EEG (didn't show up anymore after treatment)
     id_to_drop = [item for item in idlist['patient_id'] if item not in clinical_info_patients]
 
-    exclude_ids.append(id_to_drop[0])
+    exclude_ids.extend(id_to_drop)
 
     # Identify indices to keep
     keep_mask = ~idlist["patient_id"].isin(exclude_ids)
     keep_indices = np.where(keep_mask)[0]
+
+    np.save(f'{tp_dir}/mask_for_cycles.npy', keep_indices)
 
     # Filter transitions and patient list
     transitions = transitions[:, keep_indices, :, :]
@@ -76,7 +80,7 @@ def run_PCA_on_transition_matrix(n_sessions: int = 6,
     print(f"Analyzing {len(patients)} patients after exclusion")
 
     # save transition probabilities to disk
-    np.save('transition_probs.npy', transitions)
+    np.save(f'{tp_dir}/transition_probs.npy', transitions)
 
     # Continue with reshaping
     n_sessions = transitions.shape[0]
@@ -111,15 +115,16 @@ def run_PCA_on_transition_matrix(n_sessions: int = 6,
     loadings = pca.components_ # shape n_patients, n_components 
 
     # plot loadings for PC1 and PC2
+    plot_loadings(loadings, n_states=n_states, pc='PC1')
     plot_loadings(loadings, n_states=n_states, pc='PC2')
 
     return X, transitions, X_pca
 
 
-def add_PCA_to_data(n_states: int = None):
+def add_PCA_to_data(n_states: int):
     '''add PCs to the clinical dataframe'''
 
-    X, transitions, X_pca = run_PCA_on_transition_matrix(n_states=n_states)
+    X, transitions, X_pca = run_PCA_on_transition_matrix(6, False, n_states=n_states)
 
     # open clinical dataframe
     csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
@@ -127,11 +132,11 @@ def add_PCA_to_data(n_states: int = None):
     df = pd.read_csv(csv_path)
 
     # exclude repeater IDs and very noisy IDs (EEG after source reco very noisy)
-    exclude_ids = ["127", "182"]
+    exclude_ids = ["127", "182", '159', '215']
     df = df[~df["patient"].isin(exclude_ids)]
-    df = df[~df["patient"].str.contains("R")]
+    #df = df[~df["patient"].str.contains("R")]
 
-    print(f"Analyzing {df['patient'].nunique()} patients") # should be 67
+    print(f"Analyzing {df['patient'].nunique()} patients")
 
     # Define column names T00, T01, ..., T55
     transition_cols = [f"T{i}{j}" for i in range(n_states) for j in range(n_states)]
@@ -203,28 +208,25 @@ def add_PCA_to_data(n_states: int = None):
     df = df.rename(columns={'session_x': 'session_0to5'})
 
     # mean center depression score for variance inflation factor
-    df['hads_dep_score_c'] = df['dep_hads'] - df['dep_hads'].mean()
+    df['hads_dep_score_c'] = df['hads_dep_total'] - df['hads_dep_total'].mean()
     
     # make categorical for mixed linear modelling
     for col in ["patient", "session", "tms", "state", "group", "responder", 'session_0to5']:
         df[col] = df[col].astype("category", errors="ignore")
 
-    # new variable: years with depression
-    df['years_with_depression'] = df['age'] - df['age_of_diagnosis']
-
     # does PC predict hads score in session 1
     df_sess1_pre = df[(df["session"] == 1) & (df["tms"] == "pre")]
 
-    model = smf.ols("PC1 ~ dep_hads", data=df_sess1_pre).fit()
+    model = smf.ols("PC1 ~ hads_dep_total", data=df_sess1_pre).fit()
     print(model.summary())
 
-    model = smf.ols("PC2 ~ dep_hads + age + gender_3 + years_with_depression", data=df_sess1_pre).fit()
+    model = smf.ols("PC2 ~ hads_dep_total + group + age + gender + years_with_depression", data=df_sess1_pre).fit()
     print(model.summary())
 
     # plot quick regression plot
     sns.regplot(
         data=df_sess1_pre,
-        x='dep_hads', y='PC2'
+        x='hads_dep_total', y='PC2'
     )
     plt.xlabel("HADS Depression (Session 1 Pre-TMS)")
     plt.ylabel("PC2 (Session 1 Pre-TMS)")
@@ -233,7 +235,7 @@ def add_PCA_to_data(n_states: int = None):
 
     sns.regplot(
         data=df_sess1_pre,
-        x='dep_hads', y='PC1'
+        x='hads_dep_total', y='PC1'
     )
     plt.xlabel("HADS Depression (Session 1 Pre-TMS)")
     plt.ylabel("PC1 (Session 1 Pre-TMS)")
@@ -246,8 +248,8 @@ def add_PCA_to_data(n_states: int = None):
 
 
 def plot_pc_tms_vs_symptom_change(
-    symptom_col='dep_hads', 
-    control_vars=['age', 'gender_3']
+    symptom_col='hads_dep_total', 
+    control_vars=['age', 'gender']
 ):
     """
     Test whether TMS-induced PC change predicts symptom change (ΔHADS-D)
@@ -259,6 +261,11 @@ def plot_pc_tms_vs_symptom_change(
 
     # --- Data prep ---
     df['session'] = df['session'].astype(int)
+    df['gender'] = df['gender'].str.lower().map({
+            'female': 0,
+            'male': 1
+        })
+
 
     # Function to compute Δ pre–post
     def compute_change(df, var):
