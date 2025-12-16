@@ -2,7 +2,17 @@ import glob
 import re
 import pandas as pd
 from pathlib import Path
+import os
 
+# set working directory
+os.chdir(Path("L:/Lab_LucaC/Carina"))
+
+base_dir = os.getcwd()
+
+# where are the HMM summary stats stored
+hmm_dir = Path(f'{base_dir}/plots_giles_filtered3Hz')
+# where are the source recos stored? this is the patient ID base
+prep_dir = Path(f'{base_dir}/prepared_giles_filtered3Hz')
 
 def get_latest_file(directory, pattern):
     files = sorted(
@@ -91,7 +101,7 @@ def combine_dataframes(base_dir: str):
             'Depression Score Total',
             'Date Completed'
         ],
-        total_rename={'Depression Score Total': 'dep_total', 'Anxiety Score Total': 'anx_total',
+        total_rename={'Depression Score Total': 'hads_dep_total', 'Anxiety Score Total': 'hads_anx_total',
                      'Date Completed': 'hads_date'}
     )
 
@@ -157,6 +167,6 @@ def combine_dataframes(base_dir: str):
     cols = ['patient'] + [c for c in df_combined.columns if c != 'patient']
     df_combined = df_combined[cols]
 
-    df_combined.to_csv('clinical_demo_combined.csv')
+    df_combined.to_csv(f'{base_dir}/clinical_demo_combined.csv')
 
     return df_combined
