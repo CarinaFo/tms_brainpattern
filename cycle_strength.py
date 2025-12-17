@@ -7,9 +7,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import ttest_1samp
-from tqdm import tqdm
 import time
 from joblib import Parallel, delayed
+import os
 
 # osl functions (clean that up)
 from osl_dynamics.inference import modes
@@ -18,20 +18,26 @@ from osl_dynamics.analysis.tinda import tinda, optimise_sequence, circle_angles,
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning) # tinda gives annoying warnings
 
-# run in osld_tf environment on lucky3 (requires tensorflow, currently only on linux setup)
+# run in osld environment on neurov02 (requires tensorflow, currently only on linux setup)
+print(f'we have {os.cpu_count()} CPUs')
 
-home_dir = Path("/home/carinaf/tms_mdd")
+# restrict to one thread
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-tp_dir = Path(f"{home_dir}/80patients_newmodels_giles_plots")
-hmm_dir = Path(f"{home_dir}/prepared_data_80patients_giles_newmodel")
+home_dir = Path("/home/carinaf")
 
-output_dir = Path(f"{home_dir}/figures/cycles")
+tp_dir = Path(f"{home_dir}/plots_giles_filtered3Hz")
+
+output_dir = Path(f"{home_dir}/figures/cycles_3Hz")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # set up states and sessions
-n_states=8
+n_states=12
 nses=6
-nsubs=67
+nsubs=76
 
 early_tms_sess = [0, 1]
 late_tms_sess = [4, 5]
@@ -40,14 +46,6 @@ all_states = [6, 8, 10, 12]
 
 # load frequencies
 f = np.load(f"{tp_dir}/f_0_{n_states}.npy")
-
-
-# workflow for permutation testing of sign. cycle?
-
-#for st in all_states:
-#   null_model = calc_cycle_strength(True, 99, st, True, 1000)
-#   observed = calc_cycle_strength(True, 99, st, False, 1000)
-#   test_sign_cycle(True, null_model, observed, st)
 
 
 def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int, 
@@ -70,8 +68,10 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     else:
         stc = pickle.load(open(Path(f"{tp_dir}/states_{ses_idx}_{n_states}.pkl"), 'rb'))
 
-    # drop patients (index 6 has no EEG data)
-    drop_indices = [0, 1, 2, 3, 4, 6, 23, 25, 35, 58] # noisy and repeater patients
+    drop_indices = np.load(f'{tp_dir}/dropped_indices.npy')
+
+    # ToDO: clean up patient drops
+    drop_indices = np.concatenate([drop_indices, [6, 81, 82, 83, 84]])
 
     stc_filtered = [s for i, s in enumerate(stc) if i not in drop_indices]
 
@@ -98,11 +98,11 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
 
         start_time = time.time()
 
-        n_jobs=15
+        n_jobs=150
 
         # run permutations in parallel
-        null_model = Parallel(n_jobs=n_jobs)(
-            delayed(permute_state_time_course)(stc_onoff, n_states) for _ in tqdm(range(n_permutations))
+        null_model = Parallel(n_jobs=n_jobs, prefer='processes', verbose=10)(
+            delayed(permute_state_time_course)(stc_onoff, n_states) for _ in range(n_permutations)
         )
 
         end_time = time.time()
