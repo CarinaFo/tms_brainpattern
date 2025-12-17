@@ -21,8 +21,6 @@ fig_dir = Path(f'{hmm_dir}/figures')
 if not fig_dir.exists():
     os.makedirs(fig_dir, exist_ok=True)
 
-plot_pc_vs_symptom_change(n_states)
-
 def load_and_prep_data(n_states, exclude_repeater: bool = False):
     
     csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
@@ -32,19 +30,21 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
 
     unique_ids = pd.unique(df.patient)
 
-    print(unique_ids)
+    print(len(unique_ids))
 
     # exclude repeater IDs and very noisy IDs
     exclude_ids = [ "127", '159', "182", '215']
-    #removed_ids = [list(unique_ids).index(i) for i in exclude_ids]
+    removed_ids = [list(unique_ids).index(i) for i in exclude_ids]
 
     df = df[~df["patient"].isin(exclude_ids)]
     if exclude_repeater:
-        #repeater_ids = [i for i in unique_ids if "R" in str(i)]
-        #repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
+        repeater_ids = [i for i in unique_ids if "R" in str(i)]
+        repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
         df = df[~df["patient"].str.contains("R")]
+        drop_indices = removed_ids + repeater_positions
 
-    #drop_indices = removed_ids + repeater_positions
+    drop_indices = removed_ids
+    np.save(f'{hmm_dir}/dropped_indices.npy', np.array(drop_indices))
 
     print(f"Analyzing {df['patient'].nunique()} patients")
 
@@ -67,9 +67,11 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
 
 def run_PCA(n_states):
 
-    df = load_and_prep_data(8, False)
+    df = load_and_prep_data(n_states, False)
 
-    metrics = ['fo'] #, 'lt', 'sr', 'intv']
+    df = df[df['group'].isin([1,2,3])]
+
+    metrics = ['fo']#, 'lt', 'sr', 'intv']
 
     # Pivot: one row per patient/session/tms, columns = state × metric
     df_wide = df.pivot_table(
@@ -128,10 +130,7 @@ def run_PCA(n_states):
 
     # does PC predict hads score in session 1
     df_sess1_pre = df_clean.query("session == 1 and tms == 'pre'")
-    model = smf.ols("PC2 ~ hads_dep_total + group + age + gender + years_with_depression", data=df_sess1_pre).fit()
-    print(model.summary())
-
-    model = smf.ols("PC2 ~ hads_dep_total * group + age + gender + years_with_depression", data=df_sess1_pre).fit()
+    model = smf.ols("PC2 ~ hads_dep_total  + age + gender + years_with_depression", data=df_sess1_pre).fit()
     print(model.summary())
 
     # plot quick regression plot
