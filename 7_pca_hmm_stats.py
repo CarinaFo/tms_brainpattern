@@ -58,6 +58,10 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
     for col in ["patient", "session", "tms", "state", 'responder', 'group', 'gender']:
         df[col] = df[col].astype("category", errors="ignore")
 
+    plot_responder_group(df)
+
+    plot_hads_over_sessions(df)
+
     plot_symptom_change(df)
 
     plot_demographics(df)
@@ -571,5 +575,71 @@ def plot_demographics(df):
     plt.xlabel("Responder")
     plt.ylabel("Years with Depression")
     sns.despine()
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_responder_group(df):
+
+    patient_demo = df.groupby(['patient']).first()
+
+    label_map = {
+        1: 'No response < 20 %',
+        2: 'Partial response < 50 %',
+        3: 'Response < 80 %',
+        4: 'Remission > 80 %'
+    }
+
+    # Define the desired order: remission → no response
+    order = [
+        'Remission > 80 %',
+        'Response < 80 %',
+        'Partial response < 50 %',
+        'No response < 20 %'
+    ]
+
+    # Green → red colors (remission → no response)
+    colors = ['green', 'yellowgreen', 'orange', 'red']
+
+    counts = (
+        patient_demo['tms outcome']
+        .map(label_map)
+        .value_counts()
+        .reindex(order)
+    )
+
+    ax = counts.plot(
+        kind='bar',
+        color=colors,
+        title='N = 76'
+    )
+
+    ax.set_xlabel('TMS Outcome')
+    ax.set_ylabel('Number of Patients')
+
+    # Rotate x-axis labels
+    plt.xticks(rotation=45, ha='right')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_hads_over_sessions(df):
+
+    df_ses = df.groupby(['patient', 'session']).first()
+
+    plt.figure(figsize=(8, 5))
+
+    sns.violinplot(
+        data=df_ses,
+        x='session',
+        y='hads_dep_total',
+        inner='box',      # shows median + IQR
+        cut=0             # prevents extending beyond data range
+    )
+
+    plt.xlabel('Session')
+    plt.ylabel('HADS Depression Score')
+
     plt.tight_layout()
     plt.show()
