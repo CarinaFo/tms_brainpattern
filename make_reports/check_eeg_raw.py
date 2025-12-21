@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 # run in MNE environment
 
-patient_id = 'D_212'
+patient_id = 'D_223'
 home_dir = "L:\Lab_LucaC"
 folder_path = f"{home_dir}\A_QNC_ANT_Data\TMS_MDD_EEG_data\{patient_id}"
 
@@ -15,7 +15,7 @@ print(vhdr_files)
 
 raw_list = []
 
-for f in vhdr_files[4:]:
+for f in vhdr_files:
     file_path = os.path.join(folder_path, f)
     print(f"Loading {file_path} ...")
     
@@ -25,9 +25,10 @@ for f in vhdr_files[4:]:
 print("All files loaded!")
 
 for raw in raw_list:
-    raw.filter(1,40).plot(block=True)
+    raw.filter(1,40).plot(block=True, n_channels=64)
 
     raw.filter(1,40).compute_psd(fmax=45, exclude='bads').plot()
+
     plt.show()
 
 # Re-reference (depends on your lab setup)
