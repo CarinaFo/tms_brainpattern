@@ -1,5 +1,13 @@
-# Analyse network cycles (Es & Higgins, 2025, Nat. Neuro)
-# import packages
+"""Cycle Analysis. Fits tinda to state time course obtained from HMM.
+Runs permutation test on state time course and calculates cycle strength.
+
+Author: Carina Forster
+
+Last update: 18-12-2025
+
+Important: run in osld environment
+"""
+
 import pickle
 import numpy as np
 from pathlib import Path
@@ -35,7 +43,6 @@ output_dir = Path(f"{home_dir}/figures/cycles_3Hz")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # set up states and sessions
-n_states=12
 nses=6
 nsubs=76
 
@@ -43,10 +50,6 @@ early_tms_sess = [0, 1]
 late_tms_sess = [4, 5]
 all_sessions = [0, 1, 2, 3, 4, 5]
 all_states = [6, 8, 10, 12]
-
-# load frequencies
-f = np.load(f"{tp_dir}/f_0_{n_states}.npy")
-
 
 def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int, 
                         permute_states: bool, n_permutations: int = 1000):
@@ -85,7 +88,8 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
 
     fo = modes.fractional_occupancies(stc_filtered)  # shape (n_states, n_features)
     sns.boxplot(fo)
-    plt.title(f'Fractional Occupancy in session {ses_idx}')
+    plt.xlabel('States')
+    plt.ylabel('Fractional Occupancy')
     plt.savefig(f'{output_dir}/fo_{ses_idx}_{n_states}.png')
     plt.show()
 
@@ -98,7 +102,7 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
 
         start_time = time.time()
 
-        n_jobs=150
+        n_jobs=20
 
         # run permutations in parallel
         null_model = Parallel(n_jobs=n_jobs, prefer='processes', verbose=10)(
@@ -276,6 +280,9 @@ def load_and_trim_stcs(sess_list: list = range(nses)):
 def order_states_based_on_coherence():
 
     for session_idx in range(n_sessions):
+
+        # load frequencies
+        f = np.load(f"{tp_dir}/f_0_{n_states}.npy")
 
         # load state probabilities for each session
         state_probs = pickle.load(open(Path(f"{tp_dir}/states_{session_idx}_{n_states}.pkl"), 'rb'))
