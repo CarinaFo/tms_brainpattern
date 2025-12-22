@@ -17,7 +17,7 @@ elif workstation == 'lucky3':
 
 # extract folder names from directory (participant IDs)
 raw_data_path = Path(f'{home_dir}/A_QNC_ANT_Data/TMS_MDD_EEG_data')
-out_dir = Path(f'{home_dir}/Carina/tms_mdd/raw_fif_files')
+out_dir = Path(f'{home_dir}/Carina/canonical_hmm_finalsample/raw_fif_files')
 
 # Create the directory if it doesn't exist
 os.makedirs(out_dir, exist_ok=True)
@@ -25,7 +25,7 @@ os.makedirs(out_dir, exist_ok=True)
 # remove the withdrawn from the file name
 patient_ids_with_repeater = sorted([folder.name for folder in raw_data_path.iterdir() if folder.is_dir()])
 
-print(f'We have {len(patient_ids_with_repeater)} patients so far (including responders that returned)')
+print(f'We have {len(patient_ids_with_repeater)} patients so far (including repeaters)')
 
 # Create a dictionary to store .vhdr file counts
 vhdr_counts = {}
@@ -64,7 +64,8 @@ def save_raw_fif_file():
 
         # patient D_113 has only 1 full session, the second sessions is useless (super noisy)
         # 54 has only 4 minute recording first session (no comment), different EEG cap session3?
-        if ((ids == 'D_113') or (ids == 'D_054')):
+        # 211 has very noisy data (poor signal due to dreadlocks)
+        if ((ids == 'D_113') or (ids == 'D_054') or (ids == 'D_211') or (ids in partial_sessions)):
             continue
         
         print(f'{ids} processed')
@@ -162,7 +163,7 @@ def fix_header_file(vhdr_path):
 def setup_channel_montage():
 
     # read in the channel montage x,y,z file provided from ANT Neuro (in mm)
-    montage = mne.channels.read_custom_montage(Path(f'{home_dir}/Carina/tms_mdd/NA-261_NoRef.xyz'))
+    montage = mne.channels.read_custom_montage(Path(f'{home_dir}/Carina/canonical_hmm_finalsample/channel_montage/NA-261_NoRef.xyz'))
     
     # Get current montage positions
     pos = montage.get_positions()
