@@ -6,6 +6,8 @@ from glob import glob
 import matplotlib.pyplot as plt
 import mne
 from scipy.stats import spearmanr
+import pickle
+from pathlib import Path
 
 frontal_parcels = {
     23: "L VLPFC",
@@ -21,13 +23,13 @@ frontal_parcels = {
     38: "ACC"
 }
 
-BASE_PREPROC = r"L:\Lab_LucaC\Carina\tms_mdd\preprocessed_automatic_patientsupto209"
-BASE_SOURCE  = r"L:\Lab_LucaC\Carina\TMS_MDD_project\source_reco_giles_automated"
+preproc_path = Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/preprocessed")
+source_path  = Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/source_reco_giles")
 
 patient_sessions = {}
 
-for sess_dir in glob(os.path.join(BASE_PREPROC, "*_*")):
-    sess_id = os.path.basename(sess_dir)   # e.g. "184_6"
+for sess_dir in sorted(glob(os.path.join(preproc_path, "*_*"))):
+    sess_id = os.path.basename(sess_dir)
 
     if not os.path.isdir(sess_dir):
         continue
@@ -41,7 +43,7 @@ for sess_dir in glob(os.path.join(BASE_PREPROC, "*_*")):
 
     # RAW file (flat, NOT inside session folder)
     raw_crop_path = os.path.join(
-        BASE_PREPROC, f"{sess_id}_preproc_crop-raw.fif"
+        preproc_path, f"{sess_id}_preproc-raw.fif"
     )
     if not os.path.exists(raw_crop_path):
         continue
@@ -57,7 +59,7 @@ for sess_dir in glob(os.path.join(BASE_PREPROC, "*_*")):
 
     # Source parcel data
     src_path = os.path.join(
-        BASE_SOURCE, sess_id, "parc", "lcmv-parc-raw.fif"
+        source_path, sess_id, "parc", "lcmv-parc-raw.fif"
     )
     if not os.path.exists(src_path):
         continue
@@ -73,16 +75,23 @@ for sess_dir in glob(os.path.join(BASE_PREPROC, "*_*")):
 random.seed(42)
 
 valid_patients = [p for p, s in patient_sessions.items() if len(s) > 0]
-selected_patients = random.sample(valid_patients, 20)
+selected_patients = sorted(random.sample(valid_patients, 20))
+np.save(Path('L:/Lab_LucaC/Carina/canonical_hmm_finalsample/eyemovement_test/test_patients.npy'), np.array(selected_patients))
 
 print("Selected patients:")
 for p in selected_patients:
     print(f"  Patient {p} ({len(patient_sessions[p])} sessions)")
 
+# load stc
+stc = pickle.load(open(Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/eyemovement_test/states_0_6.pkl"), 'rb'))
+
 all_results = []
 
-for patient_id in selected_patients[:3]:
+for idx, patient_id in enumerate(selected_patients):
     print(f"\n=== Patient {patient_id} ===")
+
+    if patient_id == '123':
+        continue
 
     for sess in patient_sessions[patient_id]:
         print(f"  Processing session {sess['session']}")
@@ -90,7 +99,7 @@ for patient_id in selected_patients[:3]:
         raw = mne.io.read_raw_fif(sess["raw_path"], preload=True, verbose=False)
         ica = mne.preprocessing.read_ica(sess["ica_path"])
         raw_src = mne.io.read_raw_fif(sess["src_path"], preload=True, verbose=False)
-
+        stc_patient = stc[idx]
         src_data = raw_src.get_data()
 
         # Find EOG ICs
@@ -108,6 +117,11 @@ for patient_id in selected_patients[:3]:
 
         # timepoints must match
         assert src_data.shape[1] == raw.get_data().shape[1]
+        assert stc_patient.shape[1] == raw.get_data().shape[1]
+
+        r, p = spearmanr(stc_patient[:, 1], eye_ts)
+
+        print(r, p)
 
         # Correlate frontal parcels
         for idx_1b, label in frontal_parcels.items():
