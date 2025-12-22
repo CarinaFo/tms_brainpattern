@@ -3,12 +3,12 @@
 Load tinda output and calculate cycle duration based on best sequence
 (group level) fitting a second HMM on the fixed state sequence
 
-Authors: Mats van Es
-         Carina Forster
+Authors: Carina Forster
+         Mats van Es
 
-Last update: 24-11-2025
+Last update: 18-12-2025
 
-Important: run in osld-cuda environment
+Important: run in osld environment
 """
 
 import os
@@ -26,13 +26,22 @@ from osl_dynamics.data import Data
 from osl_dynamics.inference import modes
 from osl_dynamics.models.hmm_poi import Config, Model
 
+# run in osld environment on neurov02 (requires tensorflow, currently only on linux setup)
+print(f'we have {os.cpu_count()} CPUs')
+
+# restrict to one thread
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 # ------------ Directories -------------#
-home_dir = Path("/home/carinaf/tms_mdd")
+home_dir = Path("/home/carinaf")
 
-tp_dir = Path(f"{home_dir}/80patients_newmodels_giles_plots")
-hmm_dir = Path(f"{home_dir}/prepared_data_80patients_giles_newmodel")
+tp_dir = Path(f"{home_dir}/plots_giles_filtered3Hz")
+hmm_dir = Path(f"{home_dir}/prepared_giles_filtered3Hz")
 
-output_dir = Path(f"{home_dir}/figures/cycles")
+output_dir = Path(f"{home_dir}/figures/cycles_3Hz")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 n_states=8
@@ -42,39 +51,26 @@ csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
 
 # ------------ Functions -------------#
 
-def get_best_state_sequence(W: int = 16):
+def get_best_state_sequence(W: int = 16, ses: int = 99):
     """Best cycle sequence based on group"""
 
     # load stc
-    with open(f"{hmm_dir}/stc_sessionspatients_{n_states}.pkl", "rb") as f:
+    with open(f"{output_dir}/stc_{ses}_{n_states}.pkl", "rb") as f:
         stc_data = pickle.load(f)
 
     stc = stc_data['stc']
 
-    # drop patients (index 6 has no EEG data)
-    drop_indices = [0, 1, 2, 3, 4, 6, 23, 25, 35, 58] # noisy and repeater patients
-
-    stc_filtered = [s for i, s in enumerate(stc) if i not in drop_indices]
-
-    # flatten the list ( we have now subject X sessions stacked vertically, e.g. patient 1 session 1, patient 1 session 2...)
-    stc_filtered = [session for patient in stc_filtered for session in patient]
-
-    # assumes state time course is timepoints X states
-    n_states_stc = stc_filtered[0].shape[1]
-    
-    assert n_states == n_states_stc
-
-    with open(f"{hmm_dir}/tinda_{n_states}states.pkl", "rb") as f:
+    with open(f"{output_dir}/tinda_{ses}_{n_states}.pkl", "rb") as f:
         tinda = pickle.load(f)
 
     # best sequence for group
-    bs = tinda['best_sequence']['group']
+    bs = tinda['best_sequence']
 
     # Calculate FOs
-    fo = modes.fractional_occupancies(stc_filtered)
+    fo = modes.fractional_occupancies(stc)
 
     # here we reorder state sequences based on best sequence
-    stc_reorder = [istc[:, bs] for istc in stc_filtered]
+    stc_reorder = [istc[:, bs] for istc in stc]
 
     # create windowed data
     wdata = []
@@ -198,7 +194,7 @@ def run_second_level_hmm(
         log_rates = model.get_log_rates()
         pickle.dump(log_rates, open(f"{rundir}/log_rates.pkl", "wb"))
 
-    return cycle_duration
+    return cycle_duration, run, best_fe
 
 
 def viterbi_from_posteriors(state_probs, trans_mat, init_probs):
@@ -294,11 +290,14 @@ def init_log_rates(
 
 def plot_cycle_durations_per_session():
 
+    with open(f"{rundir}/cycle_duration.pkl", "rb") as f:
+        cycle_duration = pickle.load(f)
+
     # load tinda
-    with open(f"{hmm_dir}/tinda_sessions_concat_{n_states}states.pkl", "rb") as f:
+    with open(f"{output_dir}/tinda_{ses}_{n_states}.pkl", "rb") as f:
         tinda = pickle.load(f)
 
-    cycle_strength = tinda['cycle_strength']['group']
+    cycle_strength = tinda['cycle_strength']
 
     # load asymmetry matrix
     asym = tinda['asym']
@@ -313,10 +312,9 @@ def plot_cycle_durations_per_session():
     unique_ids = pd.unique(df.patient)
 
     # exclude repeater IDs and very noisy IDs
-    exclude_ids = [ "127", "182"]
+    exclude_ids = [ "127", '159', "182", '215']
 
     df = df[~df["patient"].isin(exclude_ids)]
-    df = df[~df["patient"].str.contains("R")]
 
     print(f"Analyzing {df['patient'].nunique()} patients")
 
@@ -329,9 +327,6 @@ def plot_cycle_durations_per_session():
     # transform to categorical
     for col in ["patient", "session", "tms", "state", "group", "responder"]:
         df[col] = df[col].astype("category", errors="ignore")
-
-    # create new column
-    df['years_with_depression'] = df['age'] - df['age_of_diagnosis']
 
     # get rid of states
     df_state1 = df[df['state'] == 1]
@@ -346,11 +341,44 @@ def plot_cycle_durations_per_session():
     df_state1['cycle_duration'] = cycle_mean
     df_state1['cycle_rate'] = df_state1['cycle_duration'].apply(lambda x: 1/x)
 
+    df_patient = df_state1[((df_state1['session'] == 3) & (df_state1['tms'] == 'pre'))]
+
     # remove outlier
     z = np.abs((df_state1['cycle_rate'] - df_state1['cycle_rate'].mean()) / df_state1['cycle_rate'].std())
-    df_clean = df_state1[z < 1.5]
+    df_clean = df_state1[z < 2]
+    
+    df_clean.to_csv(f'{hmm_dir}/df_includingcycles.csv')
 
-    cycle_metrics = ['cycle_strength', 'cycle_duration', 'asym_12', 'asym_21']
+    # Mixed model with random slopes for session
+    model = smf.mixedlm(
+        f'cycle_rate ~ session*madrs_total*tms',
+        data=df_clean,
+        groups='patient'
+    )
+
+    result = model.fit()
+    print(result.summary())
+
+    g = sns.lmplot(
+        data=df_clean,
+        x='hads_dep_total',
+        y='cycle_rate',
+        col='session',
+        row='tms',
+        height=3.5,
+        aspect=1,
+        scatter_kws={'alpha': 0.7},
+        line_kws={'color': 'black'},
+        ci=95
+    )
+
+    g.set_axis_labels('HADS', 'Cycle rate')
+    g.set_titles('Session {col_name} | {row_name} TMS')
+
+    plt.tight_layout()
+    plt.show()
+
+    cycle_metrics = ['cycle_strength', 'cycle_rate', 'asym_12', 'asym_21']
 
     for c in cycle_metrics:
 
@@ -363,7 +391,7 @@ def plot_cycle_durations_per_session():
         plt.tight_layout()
         plt.show()
 
-        plt.hist(df_clean[c])
+        plt.hist(df_state1[c])
         plt.show()
 
         # Mixed model with random slopes for session
@@ -377,7 +405,7 @@ def plot_cycle_durations_per_session():
         print(result.summary())
 
         model = smf.mixedlm(
-            f'{c}~ dep_hads*session',
+            f'{c}~ responder*session',
             data=df_clean,
             groups="patient"
         )
@@ -385,16 +413,12 @@ def plot_cycle_durations_per_session():
         result = model.fit()
         print(result.summary())
 
-        df_sess1 = df_state1[(df_state1.session == 1) & (df.tms == 'pre')]
+        df_sess1 = df_clean[(df_clean.session == 3) & (df_clean.tms == 'pre')]
 
-        df_sess1["log_age"] = np.log(df_sess1["age"])
-
-        model = smf.logit(f'responder ~ {c}', data=df_sess1)
-        result = model.fit()
-        print(result.summary())
+        r, p = scipy.stats.pearsonr(df_sess1.age, df_sess1.cycle_rate)
 
 
 # ------------ Main -------------#
 
 stc_reorder, data, fo, n_states = get_best_state_sequence()
-cycle_duration = run_second_level_hmm(data, 1, n_states, 10)
+cycle_duration = run_second_level_hmm(data, 5, n_states, 4)
