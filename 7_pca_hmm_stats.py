@@ -7,16 +7,19 @@ import statsmodels.formula.api as smf
 import statsmodels.api as sm
 from pathlib import Path
 import os
+from scipy.stats import zscore
 
 #plotting
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+from matplotlib.ticker import MaxNLocator
 # setup paths
 home_dir = Path("L:/Lab_LucaC/Carina/")
 
 hmm_dir = Path(f"{home_dir}/prepared_giles_filtered3Hz")
 fig_dir = Path(f'{hmm_dir}/figures')
+
+cycles_df = pd.read_csv(f'{hmm_dir}/df_includingcycles.csv')
 
 if not fig_dir.exists():
     os.makedirs(fig_dir, exist_ok=True)
@@ -47,6 +50,23 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
     np.save(f'{hmm_dir}/dropped_indices.npy', np.array(drop_indices))
 
     print(f"Analyzing {df['patient'].nunique()} patients")
+    # unique patients AFTER filtering
+    patient_ids = df["patient"].unique()
+    print(f"Total patients: {len(patient_ids)}")
+
+    rng = np.random.default_rng(seed=42)  # reproducible
+    rng.shuffle(patient_ids)
+
+    half = len(patient_ids) // 2
+
+    patients_A = patient_ids[:half]
+    patients_B = patient_ids[half:]
+
+    df_A = df[df["patient"].isin(patients_A)]
+    df_B = df[df["patient"].isin(patients_B)]
+
+    df=df_B
+    df=df_A
 
     df["state"] = df["state"] + 1  # we want states starting from 1
 
@@ -131,118 +151,67 @@ def run_PCA(n_states):
     # drop state (no longer needed)
     df_clean = df_merged.drop(columns=['state'])
     df_clean = df_clean.drop_duplicates(subset=['patient', 'session', 'tms'])
+    df_removeoutlier = df_clean[
+    (np.abs(zscore(df_clean['PC2'], nan_policy='omit')) < 3) &
+    (np.abs(zscore(df_clean['hads_dep_total'], nan_policy='omit')) < 3)
+    ]
 
     # does PC predict hads score in session 1
-    df_sess1_pre = df_clean.query("session == 1 and tms == 'pre'")
-    model = smf.ols("PC2 ~ hads_dep_total  + age + gender + years_with_depression", data=df_sess1_pre).fit()
+    df_sess1_pre = df_removeoutlier.query("session == 1 and tms == 'pre'")
+    model = smf.ols("PC3 ~ hads_dep_total  + age + gender + years_with_depression", data=df_sess1_pre).fit()
+    print(model.summary())
+
+    # does cycle strength predict hads score in session 1
+    df_sess1_pre = cycles_df.query("session == 2 and tms == 'pre'")
+    model = smf.ols("hads_dep_total ~ cycle_rate + age + gender + years_with_depression", data=df_sess1_pre).fit()
     print(model.summary())
 
     # plot quick regression plot
-    sns.regplot(
+    ax = sns.regplot(
         data=df_sess1_pre,
-        x='hads_dep_total', y='PC2'
+        x='cycle_rate', y='hads_anx_total', scatter_kws={'s': 70},
+        line_kws={'color': 'black'}
     )
-    plt.xlabel("HADS (Session 1 Pre-TMS)")
-    plt.ylabel("PC2 (Session 1 Pre-TMS)")
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    plt.title('Session 1 pre-TMS', fontsize=22)
+    plt.ylabel("HADS Anx", fontsize=22)
+    plt.xlabel("PC2", fontsize=22)
+    plt.tick_params(labelsize=18)
+
+    # Remove spines for clean style
+    for spine in ['top', 'right']:
+        plt.gca().spines[spine].set_visible(False)
+    plt.tight_layout()
+    plt.show()
+
+    # plot quick regression plot
+    ax = sns.regplot(
+        data=df_sess1_pre,
+        x='PC2', y='hads_anx_total', scatter_kws={'s': 70},
+        line_kws={'color': 'black'}
+    )
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    plt.title('Session 1 pre-TMS', fontsize=22)
+    plt.ylabel("HADS Anx", fontsize=22)
+    plt.xlabel("PC2", fontsize=22)
+    plt.tick_params(labelsize=18)
+
+    # Remove spines for clean style
+    for spine in ['top', 'right']:
+        plt.gca().spines[spine].set_visible(False)
     plt.tight_layout()
     plt.show()
     
     # does PC predict hads score in session 1
-    df_sess1_pre = df_clean.query("session == 1 and tms == 'pre'")
     model = smf.ols("PC1 ~ hads_dep_total +  age + gender + years_with_depression", data=df_sess1_pre).fit()
     print(model.summary())
 
     sns.regplot(
         data=df_sess1_pre,
-        x='hads_dep_total', y='PC1'
+        x='PC1', y='hads_dep_total'
     )
     plt.xlabel("HADS Depression (Session 1 Pre-TMS)")
     plt.ylabel("PC1 (Session 1 Pre-TMS)")
-    plt.tight_layout()
-    plt.show()
-
-    # PC2 caries some meaningful variation
-    model = smf.mixedlm(
-        "hads_dep_total ~ session*group",
-        df_clean,
-        groups=df_clean["patient"]
-    ).fit()
-
-    model.summary()
-
-    plt.figure(figsize=(6, 4))
-
-    for grp, d in df_clean.groupby('group'):
-        mean_d = d.groupby('session')['hads_dep_total'].median().reindex([1,2,3])
-
-        plt.plot(
-            mean_d.index,
-            mean_d.values,
-            marker='o',
-            linewidth=2,
-            label=f'Group {grp}'
-        )
-
-    plt.xlabel('Session')
-    plt.xticks([1, 2, 3])
-    plt.ylabel('Mean HADS-D (pre-TMS)')
-    plt.legend(title='Group')
-    plt.tight_layout()
-    plt.show()
-
-    df_pre = df_clean.query("tms == 'pre'")
-    model = smf.mixedlm(
-        "PC2 ~ session*group + group*tms",
-        df_clean,
-        groups=df_clean["patient"]
-    ).fit()
-
-    # keep only PC2, session, group, patient, tms
-    df_pp = df_clean[['patient', 'group', 'session', 'tms', 'PC2']].copy()
-
-    # pivot pre/post within subject & session
-    wide = (
-        df_pp
-        .pivot_table(
-            index=['patient', 'group', 'session'],
-            columns='tms',
-            values='PC2'
-        )
-        .reset_index()
-    )
-
-    # compute pre - post difference
-    wide['PC2_diff'] = wide['pre'] - wide['post']
-
-    # drop rows where diff can't be computed
-    wide = wide.dropna(subset=['PC2_diff'])
-        
-    plt.figure(figsize=(6, 4))
-
-    # ensure session is discrete and ordered
-    wide['session'] = wide['session'].astype(int)
-
-    for grp, d in wide.groupby('group'):
-        mean_d = (
-            d.groupby('session')['PC2_diff']
-            .mean()
-            .reindex([1, 2, 3])  # enforce discrete order
-        )
-
-        plt.plot(
-            mean_d.index,
-            mean_d.values,
-            marker='o',
-            linewidth=2,
-            label=f'Group {grp}'
-        )
-
-    plt.axhline(0, linestyle='--', linewidth=1)
-    plt.xlabel('Session')
-    plt.ylabel('Mean PC2 (pre − post)')
-    plt.title('Mean pre–post PC2 change by session (raw data)')
-    plt.xticks([1, 2, 3])
-    plt.legend(title='Group')
     plt.tight_layout()
     plt.show()
 
@@ -251,7 +220,7 @@ def run_PCA(n_states):
 
 def plot_pc_vs_symptom_change(n_states: int,
     symptom_col='hads_dep_total', 
-    control_vars=['age', 'gender', 'group']
+    control_vars=['age', 'gender', 'years_with_depression']
 ):
     """
     Test whether TMS-induced PC1/PC2 changes predict symptom change (ΔHADS-D)
@@ -270,8 +239,8 @@ def plot_pc_vs_symptom_change(n_states: int,
         wide[f'{var}_change'] = wide['pre'] - wide['post']
         return wide[['patient', 'session', f'{var}_change']]
 
-    pc1_change = compute_change(df, 'PC1')
-    pc2_change = compute_change(df, 'PC2')
+    pc1_change = compute_change(df, 'cycle_rate')
+    pc2_change = compute_change(df, 'cycle_strength')
 
     # --- Symptom change across sessions ---
     sym_wide = df.pivot_table(index='patient', columns='session', values=symptom_col).reset_index()
@@ -301,7 +270,7 @@ def plot_pc_vs_symptom_change(n_states: int,
     results = []
     models = []
 
-    for row, pc in enumerate(['PC1_change', 'PC2_change']):
+    for row, pc in enumerate(['cycle_rate_change', 'cycle_strength_change']):
         for col, (sess_change, sess_label) in enumerate(zip([1, 2], ["Session 1", "Session 2"])):
             df_s = df_merge[df_merge['session'] == sess_change].dropna(subset=['symptom_change'])
 
@@ -436,23 +405,23 @@ def plot_symptom_change_correlation(df, pc, sess_label, beta, pval):
         line_kws={'color': 'black'}
     )
     plt.title(f"{(sess_label)}", fontsize=22)
-    plt.xlabel(f"Δ {pc.split('_')[0]}", fontsize=22, color=c)
-    plt.ylabel("Δ depression score", fontsize=22)
+    plt.xlabel(f"Δ {pc.split('_')[0]}", fontsize=22)
+    plt.ylabel("Δ HADS", fontsize=22)
     plt.tick_params(labelsize=18)
     # Remove spines for clean style
     for spine in ['top', 'right']:
         plt.gca().spines[spine].set_visible(False)
 
     # Annotation: β and p
-    xlim = plt.xlim()
-    ylim = plt.ylim()
-    plt.text(
-        xlim[1]*0.8, ylim[1]*-0.5,  # top-right (adjust as needed)
-        f"β = {beta:.2f}\n$p$ = {pval:.3f}",
-        ha='right', va='bottom',
-        fontsize=18,
-        bbox=None,
-    )
+    #xlim = plt.xlim()
+    #ylim = plt.ylim()
+    #plt.text(
+    #    xlim[1]*0.8, ylim[1]*-0.5,  # top-right (adjust as needed)
+    #    f"β = {beta:.2f}\n$p$ = {pval:.3f}",
+     #   ha='right', va='bottom',
+     #   fontsize=18,
+    #    bbox=None,
+    #)
 
     plt.tight_layout()
     plt.savefig(f'{fig_dir}/PC2_deltahads.png', dpi=300, bbox_inches='tight')
@@ -641,5 +610,92 @@ def plot_hads_over_sessions(df):
     plt.xlabel('Session')
     plt.ylabel('HADS Depression Score')
 
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_group_effects(df_clean):
+
+    # PC2 caries some meaningful variation
+    model = smf.mixedlm(
+        "hads_dep_total ~ session*group",
+        df_clean,
+        groups=df_clean["patient"]
+    ).fit()
+
+    model.summary()
+
+    plt.figure(figsize=(6, 4))
+
+    for grp, d in df_clean.groupby('group'):
+        mean_d = d.groupby('session')['hads_dep_total'].median().reindex([1,2,3])
+
+        plt.plot(
+            mean_d.index,
+            mean_d.values,
+            marker='o',
+            linewidth=2,
+            label=f'Group {grp}'
+        )
+
+    plt.xlabel('Session')
+    plt.xticks([1, 2, 3])
+    plt.ylabel('Mean HADS-D (pre-TMS)')
+    plt.legend(title='Group')
+    plt.tight_layout()
+    plt.show()
+
+    model = smf.mixedlm(
+        "PC2 ~ session*group + group*tms",
+        df_clean,
+        groups=df_clean["patient"]
+    ).fit()
+
+    # keep only PC2, session, group, patient, tms
+    df_pp = df_clean[['patient', 'group', 'session', 'tms', 'PC2']].copy()
+
+    # pivot pre/post within subject & session
+    wide = (
+        df_pp
+        .pivot_table(
+            index=['patient', 'group', 'session'],
+            columns='tms',
+            values='PC2'
+        )
+        .reset_index()
+    )
+
+    # compute pre - post difference
+    wide['PC2_diff'] = wide['pre'] - wide['post']
+
+    # drop rows where diff can't be computed
+    wide = wide.dropna(subset=['PC2_diff'])
+        
+    plt.figure(figsize=(6, 4))
+
+    # ensure session is discrete and ordered
+    wide['session'] = wide['session'].astype(int)
+
+    for grp, d in wide.groupby('group'):
+        mean_d = (
+            d.groupby('session')['PC2_diff']
+            .mean()
+            .reindex([1, 2, 3])  # enforce discrete order
+        )
+
+        plt.plot(
+            mean_d.index,
+            mean_d.values,
+            marker='o',
+            linewidth=2,
+            label=f'Group {grp}'
+        )
+
+    plt.axhline(0, linestyle='--', linewidth=1)
+    plt.xlabel('Session')
+    plt.ylabel('Mean PC2 (pre − post)')
+    plt.title('Mean pre–post PC2 change by session (raw data)')
+    plt.xticks([1, 2, 3])
+    plt.legend(title='Group')
     plt.tight_layout()
     plt.show()
