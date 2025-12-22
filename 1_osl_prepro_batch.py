@@ -9,7 +9,7 @@
 
 # Code has been adapted but is based on the Lemon preprocessing pipeline implemented in osl ephys
 # code written by Andrew Qinn and Chetan Gohil
-# run in osl-e environment on linux (!!!!! does not run on windows)
+# run in osle environment on linux (!!!!! does not run on windows)
 import pandas as pd
 import numpy as np
 import mne
@@ -22,20 +22,25 @@ from pathlib import Path
 
 from osl_ephys import preprocessing, utils
 
-# determine cores available 
-print(f"Number of CPU cores: {os.cpu_count()}")
-cpus_avail = os.cpu_count()
+# run in osld environment on neurov02 (requires tensorflow, currently only on linux setup)
+print(f'we have {os.cpu_count()} CPUs')
 
-workstation = 'lucky3'
+# restrict to one thread
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-home_dir = 'home/carinaf/LabData/Lab_LucaC/Carina/tms_mdd'
+workstation = 'neuroserv'
+
+home_dir = '/home/carinaf/LabData/Lab_LucaC/Carina/canonical_hmm_finalsample'
 
 # create output directory
-outdir = f'{home_dir}/preprocessed_automatic'
+outdir = f'{home_dir}/preprocessed'
 os.makedirs(outdir, exist_ok=True)
 
 # We will first fetch all data using an osl-ephys utility
-file_name = '{subj}_{session}-raw'
+file_name = '{subj}_{session}_crop-raw'
 fullpath = os.path.join(home_dir, 'raw_fif_files', file_name + '.fif')
 datafiles = utils.Study(fullpath)
 filenames = datafiles.get() # this should be the path not name?
@@ -50,9 +55,7 @@ ids_only = [] # store ids only to get unique patients
 pattern = r"(\d{3}R?)_(\d)"  # Captures 'PD_123_1' or 'PD_123R_2'
 
 for file in sorted_files:
-    # Remove "(Withdrawn)" before processing
-    cleaned_file = re.sub(r"\s*\(Withdrawn\)", "", file)  
-    match = re.search(pattern, cleaned_file)
+    match = re.search(pattern, file)
     if match:
         id = match.group(1)  # Store only the numeric ID
         ids_only.append(id)
@@ -134,15 +137,16 @@ if __name__ == "__main__":
             preproc:
             - create_heog: None # create horizontal eye movements channel (extra function)
             - set_channel_types: {HEOG: eog, 1RC: eog, 1LC: eog} # mne wrapper
-            - filter: {l_freq: 0.25, h_freq: 50, method: iir, iir_params: {order: 5, ftype: butter}} # mne wrapper
+            - filter: {l_freq: 0.25, h_freq: 100, method: iir, iir_params: {order: 5, ftype: butter}} # mne wrapper
             - notch_filter: {freqs: 50 100} # mne wrapper
             - resample: {sfreq: 250} # mne wrapper
-            - bad_segments: {segment_len: 500, picks: eeg, significance_level: 0.2}
-            - bad_segments: {segment_len: 500, picks: eeg, mode: diff, significance_level: 0.2}
+            - bad_segments: {segment_len: 200, picks: eeg, significance_level: 0.2}
+            - bad_segments: {segment_len: 200, picks: eeg, mode: diff, significance_level: 0.2}
             - bad_channels: {picks: 'eeg', significance_level: 0.2} # osl wrapper uses generalized ESD test (osl wrapper)
-            - bad_segments: {segment_len: 500, picks: eog, significance_level: 0.2} # generalized ESD test (osl wrapper)
+            - bad_segments: {segment_len: 200, picks: eog, significance_level: 0.2} # generalized ESD test (osl wrapper)
             - custom_ica: {n_components: 0.99, picks: 'eeg'} # mne wrapper for fastica
-            - interpolate_bads: {reset_bads: False} # keep information about bad channels in info # mne anonymous (runs mne function directly)
+            - ica_raw: {n_components: 20, picks: 'eeg', l_freq: 1, h_freq: 40}
+            - ica_autoreject: (apply: true)
             - drop_channels: {ch_names: ['HEOG', 'ICA-VEOG', 'ICA-HEOG'], on_missing: 'ignore'} # mne anonymous
             - set_eeg_reference: {projection: true} # mne anonymous
             """
@@ -159,7 +163,7 @@ if __name__ == "__main__":
             - set_eeg_reference: {projection: true} # mne anonymous
             """
     
-    client = Client(threads_per_worker=1, n_workers=int(cpus_avail/2))
+    client = Client(threads_per_worker=1, n_workers=10)
 
     # process subjects with batch
     preprocessing.run_proc_batch(config_text_pre, sorted_files, idlist, outdir=outdir, overwrite=True, 
@@ -214,3 +218,130 @@ def extract_patient_ids(src_dir: Path = Path("/home/carinaf/tms_mdd/preprocessed
                 patient_ids.append(subfolder)
 
     return patient_ids
+
+
+def crop_data_for_hmm(fs: int = 250):
+
+    import re
+
+    # Define custom crop shifts (in seconds) for specific subjects (according to experimenter comements)
+    special_crop_shifts = {
+        "153_1": 25,
+        "153_3": 60,
+        "174_1": 40,
+        "175_3": 15,
+    }
+
+    fif_dir = Path(f'{home_dir}/raw_fif_files/')
+
+    # get all files from the directory
+    filenames = sorted(os.listdir(fif_dir))
+
+    # Extract (id, session) tuples
+    results = []
+    pattern = re.compile(r"^(?:PD_)?([0-9]{3}R?|[0-9]{3})_([1-6])")
+
+    for fname in filenames:
+        match = pattern.match(fname)
+        if match:
+            subj_id = match.group(1)
+            session = int(match.group(2))
+            results.append((subj_id, session))
+
+    # Load parcellation for each patient
+    for subj_id, session in sorted(pd.unique(results)):
+        
+        # patients with missing EEGs
+        if subj_id in ['123', '090']:
+            continue
+
+        # Skip subject IDs 180, 183, and all IDs >= 186 (different paradigm)
+        if subj_id in ['180', '183'] or subj_id >= '186':
+
+            id = f'{subj_id}_{str(session)}'
+
+            file_name = os.path.join(fif_dir, f"{id}-raw.fif")
+        
+            raw = mne.io.read_raw_fif(file_name, preload=True)
+
+            annotations_pre_crop = raw.annotations
+
+            # Crop first and last 1 minute
+            cropped_raw = raw.copy().crop(tmin=60, tmax=raw.times[-1] - 60)
+
+            annotations_post_crop = cropped_raw.annotations
+
+            df_pre = pd.DataFrame({
+                "onset_pre": annotations_pre_crop.onset,
+                "duration_pre": annotations_pre_crop.duration,
+                "description_pre": annotations_pre_crop.description,
+            })
+            
+            df_post = pd.DataFrame({
+                  "onset_post": annotations_post_crop.onset,
+                "duration_post": annotations_post_crop.duration,
+                "description_post": annotations_post_crop.description
+            })
+
+            annotations_path_pre = os.path.join(fif_dir, f"{id}_annotations_pre.csv")
+
+            df_pre.to_csv(annotations_path_pre, index=False)
+
+            annotations_path_post = os.path.join(fif_dir, f"{id}_annotations_post.csv")
+
+            df_post.to_csv(annotations_path_post, index=False)
+
+            file_name_crop = os.path.join(fif_dir, f"{id}_crop-raw.fif")
+
+            cropped_raw.save(file_name_crop, overwrite=True)
+
+        else:
+
+            id = f'{subj_id}_{str(session)}'
+
+            file_name = os.path.join(fif_dir, f"{id}-raw.fif")
+
+            try:
+                raw = mne.io.read_raw_fif(file_name, preload=True)
+
+                if id in special_crop_shifts.keys():
+                    # Determine shift
+                    shift = special_crop_shifts.get(id, 0)
+                else:
+                    shift = 0
+                
+                if id == '087_1':
+                    raw = raw
+                else:
+                    # Apply cropping
+                    cropped_raw = raw.copy().crop(tmin=140, tmax=380 + shift)
+
+                # save cropped file
+                file_name_crop = os.path.join(fif_dir, f"{id}_crop-raw.fif")
+        
+                # Save cropped data
+                cropped_raw.save(file_name_crop, overwrite=True)
+
+            except Exception as e:
+                print(f"Skipping {id} due to error during cropping: {e}")
+
+
+def rename_raw_files():
+    import re
+    from pathlib import Path
+
+    fif_dir = Path(f"{home_dir}/raw_fif_files")
+    pattern = re.compile(r"^(?:PD_)?([0-9]{3}R?|[0-9]{3})_([1-6]).*\.fif$")
+
+    for f in fif_dir.glob("*.fif"):
+        m = pattern.match(f.name)
+        if not m:
+            continue
+
+        subj_id, session = m.group(1), m.group(2)
+        new_name = f"{subj_id}_{session}-raw.fif"
+        new_path = f.parent / new_name
+
+        if f.name != new_name:
+            print(f"Renaming: {f.name} → {new_name}")
+            f.rename(new_path)
