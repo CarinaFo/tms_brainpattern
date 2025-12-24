@@ -62,7 +62,7 @@ for file in sorted_files:
         session = match.group(2) # store session
         idlist.append(f"{id}_{session}")
 
-print(f'we have data for {len(pd.unique(ids_only))} patients')
+print(f'we have data for {len(pd.unique(np.array(ids_only)))} patients')
 
 # make sure IDlist is the same length as files 
 assert len(idlist) == len(sorted_files)
@@ -132,21 +132,22 @@ if __name__ == "__main__":
                 dataset["ica"].apply(dataset["raw"])
             return dataset
 
-    # configure settings pre manual correction
+    # configure settings pre manual correction (based on LEMON preprocessing pipeline)
     config_text_pre = """
             preproc:
             - create_heog: None # create horizontal eye movements channel (extra function)
             - set_channel_types: {HEOG: eog, 1RC: eog, 1LC: eog} # mne wrapper
-            - filter: {l_freq: 0.25, h_freq: 100, method: iir, iir_params: {order: 5, ftype: butter}} # mne wrapper
+            - filter: {l_freq: 0.25, h_freq: 125, method: iir, iir_params: {order: 5, ftype: butter}} # mne wrapper
             - notch_filter: {freqs: 50 100} # mne wrapper
             - resample: {sfreq: 250} # mne wrapper
-            - bad_segments: {segment_len: 200, picks: eeg, significance_level: 0.2}
-            - bad_segments: {segment_len: 200, picks: eeg, mode: diff, significance_level: 0.2}
-            - bad_channels: {picks: 'eeg', significance_level: 0.2} # osl wrapper uses generalized ESD test (osl wrapper)
-            - bad_segments: {segment_len: 200, picks: eog, significance_level: 0.2} # generalized ESD test (osl wrapper)
-            - custom_ica: {n_components: 0.99, picks: 'eeg'} # mne wrapper for fastica
-            - ica_raw: {n_components: 20, picks: 'eeg', l_freq: 1, h_freq: 40}
-            - ica_autoreject: (apply: true)
+            - bad_channels: {picks: eeg} # osl wrapper uses generalized ESD test (osl wrapper)
+            - bad_segments: {segment_len: 2500, picks: eog, detect_zeros: False}
+            - bad_segments: {segment_len: 500, picks: eeg, significance_level: 0.1, detect_zeros: False}
+            - bad_segments: {segment_len: 500, picks: eeg, mode: diff, significance_level: 0.1, detect_zeros: False}
+            - ica_raw: {n_components: 0.99, picks: 'eeg', l_freq: 1}
+            - ica_autoreject: {apply: true, ecgmethod: None}
+            #- custom_ica: {apply: true, n_components: 30, picks: eeg} # mne wrapper for fastica
+            - interpolate_bads: {reset_bads: false} # keep information about bad channels in info # mne anonymous (runs mne function directly)
             - drop_channels: {ch_names: ['HEOG', 'ICA-VEOG', 'ICA-HEOG'], on_missing: 'ignore'} # mne anonymous
             - set_eeg_reference: {projection: true} # mne anonymous
             """
@@ -163,16 +164,15 @@ if __name__ == "__main__":
             - set_eeg_reference: {projection: true} # mne anonymous
             """
     
-    client = Client(threads_per_worker=1, n_workers=10)
+    #client = Client(threads_per_worker=1, n_workers=10)
 
     # process subjects with batch
-    preprocessing.run_proc_batch(config_text_pre, sorted_files, idlist, outdir=outdir, overwrite=True, 
-                                dask_client=True, extra_funcs=[custom_ica, create_heog])
+    #preprocessing.run_proc_batch(config_text_pre, sorted_files, idlist, outdir=outdir, overwrite=True, 
+     #                           dask_client=True, extra_funcs=[custom_ica, create_heog])
 
-    #run sequentially
-    #for i in range(first_index, first_index+1):
-    #    preprocessing.run_proc_chain(config_text_pre, sorted_files[i], idlist[i], outdir=outdir,
-    #                     overwrite=True, extra_funcs=[custom_ica, create_heog])
+    # run sequentially
+    preprocessing.run_proc_chain(config_text_pre, sorted_files[2], idlist[2], outdir=outdir,
+                         overwrite=True, extra_funcs=[custom_ica, create_heog])
 
 
 # helper functions (store in utils at some point)
@@ -251,6 +251,14 @@ def crop_data_for_hmm(fs: int = 250):
     # Load parcellation for each patient
     for subj_id, session in sorted(pd.unique(results)):
         
+        id = f'{subj_id}_{session}'
+        file_name_crop = fif_dir / f"{id}_crop-raw.fif"
+
+        # 🔹 SKIP IF CROPPED FILE ALREADY EXISTS
+        if file_name_crop.exists():
+            print(f"Skipping {id}: cropped file already exists.")
+            continue
+
         # patients with missing EEGs
         if subj_id in ['123', '090']:
             continue
