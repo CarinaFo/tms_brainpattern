@@ -15,6 +15,7 @@ import pandas as pd
 import numpy as np
 import os
 import mne
+from pathlib import Path
 
 import osl_ephys
 import re
@@ -30,7 +31,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 # setup FSL
-#osl_ephys.setup_fsl('/usr/local/fsl')
+osl_ephys.source_recon.setup_fsl('/usr/local/fsl')
 
 glasser_parcellation = 'Glasser52_binary_space-MNI152NLin6_res-8x8x8.nii'
 giles_39 = 'fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii'
@@ -63,22 +64,21 @@ for file in smri_files:
 print(f'we have an MRI scan for {len(mri_id_map)} patients')
 
 # Define the base directory for preprocessed files
-preproc_dir = f"{local_dir}/preprocessed"
+preproc_dir = Path(f'{local_dir}/preprocessed')
 
-# get all files that directory
-filenames = sorted(os.listdir(preproc_dir))[:-2]
+files = [str(f) for f in preproc_dir.rglob("*_preproc-raw.fif")]
 
-# Filter only the .fif files that contain '_crop_' in the filename
-crop_fif_files = sorted([
-    f for f in filenames
-    if f.endswith('.fif') and 'crop' in f
+# Strip everything after "_preproc"
+ids_session = [
+    Path(f).stem.replace("_preproc-raw", "")
+    for f in files
+]
+
+# Extract subject ID (handles 016 vs 016R)
+ids_only = pd.unique([
+    s.split("_")[0]
+    for s in ids_session
 ])
-
-# Strip everything after the second underscore to get id and session
-ids_session = [key.split('_preproc')[0] for key in crop_fif_files]
-
-# get an ID list
-ids_only = pd.unique([i[:3] for i in ids_session])
 
 # Create a mapping of EEG sessions to MRI files
 eeg_mri_mapping = {}
@@ -88,7 +88,6 @@ for session in ids_session:
     if match:
         patient_id = match.group(1)
         eeg_mri_mapping[session] = mri_id_map.get(patient_id, 'standard')
-
 
 prepro_ids = pd.unique([ids[:-2] for ids in eeg_mri_mapping.keys()])
 
@@ -104,9 +103,6 @@ exclude_patients = ['021R', '037R', '072', '067', '087',  '088', '090', '093',
                     '168', '171', '174', '178', '180', '184', '183', '189',
                     '190', '191', '194', '195', '198', '201']
 
-
-print(f'we exclude {len(exclude_not_all_sessions)} patients')
-
 # Filter out excluded patients from the dictionary
 filtered_dict = {
     id_: struct
@@ -115,7 +111,7 @@ filtered_dict = {
 }
 
 # Generate the list of preprocessed file paths
-preproc_files = [f"{preproc_dir}/{id_}_preproc-raw.fif" for id_ in filtered_dict.keys()]
+preproc_files = [f"{preproc_dir}/{id_}/{id_}_preproc-raw.fif" for id_ in filtered_dict.keys()]
 
 # lists need to be equal length (ID list, anatomical scan location, preprocessed fif files)
 assert len(list(filtered_dict.keys())) == len(list(filtered_dict.values())) == len(preproc_files)
