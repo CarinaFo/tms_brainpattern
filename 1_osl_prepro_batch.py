@@ -1,4 +1,3 @@
-
 """Script for preprocessing resting-state EEG data for the TMS_MDD_QNC study
     This script preprocesses the data in parallel.
     Run python file in terminal (after activating conda environment osl) for parallel processing to run smoothly.
@@ -132,6 +131,7 @@ if __name__ == "__main__":
                 dataset["ica"].apply(dataset["raw"])
             return dataset
 
+
     # configure settings pre manual correction (based on LEMON preprocessing pipeline)
     config_text_pre = """
             preproc:
@@ -152,6 +152,7 @@ if __name__ == "__main__":
             - set_eeg_reference: {projection: true} # mne anonymous
             """
 
+            
     # configure settings post manual correction
     config_text_post = """
             preproc:
@@ -163,16 +164,16 @@ if __name__ == "__main__":
             - drop_channels: {ch_names: ['HEOG', 'ICA-VEOG', 'ICA-HEOG'], on_missing: 'ignore'} # mne anonymous
             - set_eeg_reference: {projection: true} # mne anonymous
             """
-    
-    #client = Client(threads_per_worker=1, n_workers=10)
+
+    client = Client(threads_per_worker=1, n_workers=10)
 
     # process subjects with batch
-    #preprocessing.run_proc_batch(config_text_pre, sorted_files, idlist, outdir=outdir, overwrite=True, 
-     #                           dask_client=True, extra_funcs=[custom_ica, create_heog])
+    preprocessing.run_proc_batch(config_text_pre, sorted_files, idlist, outdir=outdir, overwrite=True, 
+                                dask_client=True, extra_funcs=[custom_ica, create_heog])
 
-    # run sequentially
-    preprocessing.run_proc_chain(config_text_pre, sorted_files[2], idlist[2], outdir=outdir,
-                         overwrite=True, extra_funcs=[custom_ica, create_heog])
+    #run sequentially
+    #preprocessing.run_proc_chain(config_text_pre, sorted_files[0], idlist[0], outdir=outdir,
+                        #overwrite=True, extra_funcs=[custom_ica, create_heog])
 
 
 # helper functions (store in utils at some point)
@@ -251,16 +252,17 @@ def crop_data_for_hmm(fs: int = 250):
     # Load parcellation for each patient
     for subj_id, session in sorted(pd.unique(results)):
         
+        # patients with missing EEGs
+        if subj_id in ['123', '090']:
+            continue
+
         id = f'{subj_id}_{session}'
+
         file_name_crop = fif_dir / f"{id}_crop-raw.fif"
 
         # 🔹 SKIP IF CROPPED FILE ALREADY EXISTS
         if file_name_crop.exists():
             print(f"Skipping {id}: cropped file already exists.")
-            continue
-
-        # patients with missing EEGs
-        if subj_id in ['123', '090']:
             continue
 
         # Skip subject IDs 180, 183, and all IDs >= 186 (different paradigm)
