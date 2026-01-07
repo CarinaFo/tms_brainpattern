@@ -3,7 +3,7 @@
 Author: Carina Forster,
         Chet Gohil
 
-run in osld (Python 3.12) environment on linux (lucky3)
+run in osld (Python 3.12) environment on linux (neuroserv2)
 """
 import pickle
 import numpy as np
@@ -21,22 +21,36 @@ from osl_dynamics.data import Data
 from osl_dynamics.analysis import spectral
 
 # set working directory
-os.chdir(Path('/home/carinaf/tms_mdd'))
+os.chdir(Path('/home/carinaf/canonical_hmm_finalsample'))
 
 basedir = os.getcwd()
-source_dir = os.path.join(basedir, "source_reco_giles_new_montage")
-prep_dir = os.path.join(basedir, "prepared_data_clean_giles_newmodel")
-save_dir = os.path.join(basedir, "57patients_newmodels_giles_plots")
+source_dir = os.path.join(basedir, "source_reco_giles_parcel")
+prep_dir = os.path.join(basedir, "prepared_data_giles_1Hz_3Hzfiltereddata")
+save_dir = os.path.join(basedir, "hmm_fits_1Hz_canonical_data3Hzfiltered")
 os.makedirs(save_dir, exist_ok=True)
 os.makedirs(prep_dir, exist_ok=True)
 
+missing_clinical_data = ['087', '112', '215', '217', '218', '220', '221', '222', '223'] # 9 patients
+
+noisy_eeg = ['117', '143', '160', '169', '179']
+
+corrupt_MRI = ['141', '210']
+
+no_individual_MRI = ['053R', '127', '135', '152', '189']
+
+excluded_subjects = sorted({
+    *missing_clinical_data,
+    *noisy_eeg,
+    *corrupt_MRI,
+    *no_individual_MRI,
+})
 
 def load_canonical_hmm(n_states: int, parcellation: str, sequence_length: int = 400, batch_size: int = 64):
     
-    means = np.load(f"{basedir}/cam-can/{parcellation}/{n_states:02d}_states/means.npy")
-    covs = np.load(f"{basedir}/cam-can/{parcellation}/{n_states:02d}_states/covs.npy")
-    trans_prob = np.load(f"{basedir}/cam-can/{parcellation}/{n_states:02d}_states/trans_prob.npy")
-    initial_state_probs = np.load(f"{basedir}/cam-can/{parcellation}/{n_states:02d}_states//initial_state_probs.npy")
+    means = np.load(f"{basedir}/cam-can/canonical_models_1Hz/{parcellation}/{n_states:02d}_states/means.npy")
+    covs = np.load(f"{basedir}/cam-can/canonical_models_1Hz/{parcellation}/{n_states:02d}_states/covs.npy")
+    trans_prob = np.load(f"{basedir}/cam-can/canonical_models_1Hz/{parcellation}/{n_states:02d}_states/trans_prob.npy")
+    initial_state_probs = np.load(f"{basedir}/cam-can/canonical_models_1Hz/{parcellation}/{n_states:02d}_states//initial_state_probs.npy")
 
     config = Config(
         n_states=n_states,
@@ -56,29 +70,33 @@ def load_canonical_hmm(n_states: int, parcellation: str, sequence_length: int = 
     return Model(config)
 
 
-def save_prep_data(parcellation: str = '38ROI_Giles_oldmodel'):
+def save_prep_data(parcellation: str = '38ROI_Giles'):
 
     # get all sessions
     id_list = sorted(os.listdir(source_dir))[:-2]
 
     # load preprocessed source data that
     filenames = []
-    ids_only=[]
+    ids_before_exlusion=[]
+    ids_after_exclusion=[]
 
     # load parcellation for each patient
     for id in id_list:
         ids = id[:-2]
-        if ids in ['092', '117', '123', '105', '160', '179']:
-            # the PSDs are pretty noisy and/or sessions are missing
+        ids_before_exlusion.append(ids)
+        if ids in excluded_subjects:
+            # the PSDs are extremely noisy and/or EEG sessions/clinical scores are missing
             continue
-        ids_only.append(ids)
+        ids_after_exclusion.append(ids)
         file_name = os.path.join(source_dir, Path(f"{id}/parc/lcmv-parc-raw.fif"))
         filenames.append(file_name)
 
     # Create DataFrame with IDs and placeholder for patient data
     df = pd.DataFrame({
-        'patient_id': ids_only
+        'patient_id': pd.unique(ids_after_exclusion)
     })
+
+    print(f'{len(pd.unique(pd.Series(ids_after_exclusion)))} patients prepared')
 
     # save patient IDs for later combining with clinical data
     df.to_csv(f'{prep_dir}/patients_fitted_for_this_hmm.csv', index=False)
@@ -119,7 +137,8 @@ def save_prep_data(parcellation: str = '38ROI_Giles_oldmodel'):
         data = Data(session, picks="misc", sampling_frequency=250, reject_by_annotation="omit", n_jobs=8)
 
         # drop bad segments before TDE
-        bad_segments_removed_data = data.prepare({'remove_bad_segments': {"significance_level": 0.3,
+        bad_segments_removed_data = data.prepare({'filter': {'low_freq': 3}, 
+                                                'remove_bad_segments': {"significance_level": 0.3,
                                                 "maximum_fraction": 0.4, 
                                                 "use_raw": False}})
 
@@ -128,8 +147,8 @@ def save_prep_data(parcellation: str = '38ROI_Giles_oldmodel'):
         bad_segments_removed_data.save(bs_path)
 
         # TDE
-        pca_components = np.load(f"{basedir}/cam-can/{parcellation}/pca_components.npy")
-        template_cov = np.load(f"{basedir}/cam-can/{parcellation}/template_cov.npy")
+        pca_components = np.load(f"{basedir}/cam-can/canonical_models_1Hz/{parcellation}/pca_components.npy")
+        template_cov = np.load(f"{basedir}/cam-can/canonical_models_1Hz/{parcellation}/template_cov.npy")
 
         tde_data = bad_segments_removed_data.prepare({
             "align_channel_signs": {"template_cov": template_cov, "n_embeddings": 15},
@@ -162,7 +181,7 @@ def save_state_probabilities(session_idx: int = 0, n_states: int = 10):
     stc = osl_dynamics.inference.modes.argmax_time_courses(stc)
 
     # Calculate transition probability matrices
-    tp = osl_dynamics.analysis.modes.calc_trans_prob_matrix(stc, n_states=n_states)
+    tp = osl_dynamics.analysis.post_hoc.calc_trans_prob_matrix(stc, n_states=n_states)
     np.save(f"{save_dir}/tp_{session_idx}_{n_states}.npy", tp)
 
     return f"saved tp and stc for session {session_idx}"
@@ -255,6 +274,41 @@ def compare_free_energy(session_idx: int, n_states: int):
         patient_fe.append(fe)  # normalize by time points
     
     return patient_fe
+
+
+n_sessions = 6
+states = [8]
+
+session_free_energy_states = []
+
+for st in states:
+    session_free_energy = []
+    for i in range(n_sessions):
+        save_state_probabilities(i, st)
+        save_hmm_features(i, st)
+        save_spectral(i, st)
+        #patient_fe = compare_free_energy(i, st)
+        #session_free_energy.append(patient_fe)
+    #session_free_energy_states.append(session_free_energy)
+
+fe_array = np.squeeze(np.array(session_free_energy_states))
+
+# free energy should decrease with model complexity
+means = np.mean(fe_array, axis=1)
+plt.figure(figsize=(8, 5))
+plt.plot([6, 8, 10, 12], means, 'ro-', linewidth=2, markersize=8)
+plt.xlabel('Number of HMM States')
+plt.ylabel('Mean Free Energy')
+plt.title('Free Energy vs Model Complexity')
+plt.grid(True, alpha=0.3)
+
+plt.show()
+
+# Print the values
+for i, states in enumerate([6, 8, 10, 12]):
+    print(f"{states} states: {means[i]:.3f}")
+
+investigate_free_energy(session_free_energy)
 
 
 def investigate_free_energy(session_free_energy: np.ndarray):
@@ -373,38 +427,3 @@ def investigate_free_energy(session_free_energy: np.ndarray):
     plt.title("Free energy per session")
     plt.tight_layout()
     plt.show()
-
-
-n_sessions = 6
-states = [6, 8, 10, 12]
-
-session_free_energy_states = []
-
-for st in states:
-    session_free_energy = []
-    for i in range(n_sessions):
-        #save_state_probabilities(i, st)
-        #save_hmm_features(i, st)
-        #save_spectral(i, st)
-        patient_fe = compare_free_energy(i, st)
-        session_free_energy.append(patient_fe)
-    session_free_energy_states.append(session_free_energy)
-
-fe_array = np.squeeze(np.array(session_free_energy_states))
-
-# free energy should decrease with model complexity
-means = np.mean(fe_array, axis=1)
-plt.figure(figsize=(8, 5))
-plt.plot([6, 8, 10, 12], means, 'ro-', linewidth=2, markersize=8)
-plt.xlabel('Number of HMM States')
-plt.ylabel('Mean Free Energy')
-plt.title('Free Energy vs Model Complexity')
-plt.grid(True, alpha=0.3)
-
-plt.show()
-
-# Print the values
-for i, states in enumerate([6, 8, 10, 12]):
-    print(f"{states} states: {means[i]:.3f}")
-
-investigate_free_energy(session_free_energy)
