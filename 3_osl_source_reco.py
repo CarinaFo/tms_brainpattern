@@ -21,7 +21,7 @@ import osl_ephys
 import re
 from dask.distributed import Client
 
-# run in osld environment on neurov02 (requires tensorflow, currently only on linux setup)
+# run in osle environment on neurov02 (requires tensorflow, currently only on linux setup)
 print(f'we have {os.cpu_count()} CPUs')
 
 # restrict to one thread
@@ -31,7 +31,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 # setup FSL
-osl_ephys.source_recon.setup_fsl('/usr/local/fsl')
+osl_ephys.source_recon.setup_fsl('/home/carinaf/fsl')
 
 glasser_parcellation = 'Glasser52_binary_space-MNI152NLin6_res-8x8x8.nii'
 giles_39 = 'fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii'
@@ -93,30 +93,37 @@ prepro_ids = pd.unique([ids[:-2] for ids in eeg_mri_mapping.keys()])
 
 print(f'we have {len(prepro_ids)} preprocessed patients')
 
-# based on manual inspection
-# based on criteria matched with Ilya
-exclude_patients = ['021R', '037R', '072', '067', '087',  '088', '090', '093', 
-                    '094', '099', '101', '102', '106', '107', '108', '112',
-                    '115', '113', '117', '118', '122', '123', '125', '127',
-                    '135', '134', '137', '141', '145', '146R', '148', '152', '153',
-                    '154', '156', '158', '159', '160', '161', '163',
-                    '168', '171', '174', '178', '180', '184', '183', '189',
-                    '190', '191', '194', '195', '198', '201']
+# Generate the list of preprocessed file paths
+preproc_files = sorted([
+    os.path.join(preproc_dir, d, f"{d}_preproc-raw.fif")
+    for d in os.listdir(preproc_dir)
+    if os.path.isfile(os.path.join(preproc_dir, d, f"{d}_preproc-raw.fif"))
+])
 
-# Filter out excluded patients from the dictionary
-filtered_dict = {
-    id_: struct
-    for id_, struct in eeg_mri_mapping.items()
-    if id_.split('_')[0] in prepro_ids and id_.split('_')[0]
+# get the ordered ID and session 
+ordered_ids = [
+    os.path.basename(os.path.dirname(f))
+    for f in preproc_files
+]
+
+# order the dictionary based on the ID and session
+ordered_dict = {
+    id_: eeg_mri_mapping[id_]
+    for id_ in ordered_ids
+    if id_ in eeg_mri_mapping
 }
 
-# Generate the list of preprocessed file paths
-preproc_files = [f"{preproc_dir}/{id_}/{id_}_preproc-raw.fif" for id_ in filtered_dict.keys()]
+# 5 patients have no individual MRI scan
 
-# lists need to be equal length (ID list, anatomical scan location, preprocessed fif files)
-assert len(list(filtered_dict.keys())) == len(list(filtered_dict.values())) == len(preproc_files)
+# make sure the preprocessed files and the MRI's are aligned
+assert list(ordered_dict.keys()) == ordered_ids
+assert len(ordered_dict) == len(preproc_files)
 
-print(f'we have {int(len(filtered_dict)/6)} patients left')
+missing_mri = set(ordered_ids) - set(eeg_mri_mapping)
+missing_eeg = set(eeg_mri_mapping) - set(ordered_ids)
+
+assert not missing_mri, f"Missing MRI for: {missing_mri}"
+assert not missing_eeg, f"Missing EEG for: {missing_eeg}"
 
 if __name__ == "__main__":
 
@@ -144,28 +151,30 @@ if __name__ == "__main__":
             orthogonalisation: symmetric
     """
 
-    client = Client(threads_per_worker=1, n_workers=10)
+    #client = Client(threads_per_worker=1, n_workers=10)
 
-    osl_ephys.source_recon.run_src_batch(
-          config,
-          outdir = outdir,
-          subjects= list(filtered_dict.keys()),
-          smri_files = list(filtered_dict.values()),
-          preproc_files = preproc_files,
-          dask_client=True
-    )
+    #osl_ephys.source_recon.run_src_batch(
+     #     config,
+     #     outdir = outdir,
+     #     subjects= list(ordered_dict.keys()),
+     #     smri_files = list(ordered_dict.values()),
+     #     preproc_files = preproc_files,
+     #     dask_client=True
+    #)
 
-# process single patients (debugging) 
-# import numpy as np
-
-# # get's you the first session index of that patient
-#index = np.where(np.char.find(preproc_files, '141_2') != -1)[0][0]
-
-#for i in range(index, len(preproc_files)):
+#for i in range(len(preproc_files)):
 #         osl_ephys.source_recon.run_src_chain(
 #            config,
 #             outdir = outdir,
-#            subject = list(filtered_dict.keys())[i],
-#            smri_file = list(filtered_dict.values())[i],
-#            preproc_file = preproc_files[i]
+#           subject = list(ordered_dict.keys())[i],
+#           smri_file = list(ordered_dict.values())[i],
+#           preproc_file = preproc_files[i]
 #          )
+         
+osl_ephys.source_recon.run_src_chain(
+    config,
+    outdir = outdir,
+    subject = list(ordered_dict.keys())[0],
+    smri_file = list(ordered_dict.values())[0],
+    preproc_file = preproc_files[0]
+)
