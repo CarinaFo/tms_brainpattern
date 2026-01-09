@@ -141,7 +141,8 @@ def combine_dataframes(base_dir: str):
         'Previous TMS',
         'Previous ECT',
         'Number of Treatment Days',
-        'TMS Outcome'
+        'TMS Outcome',
+        'Number of Treatment Days'
     ]].copy()
 
     df_demo['patient'] = normalize_patient_id(df_demo['Participant ID'])
