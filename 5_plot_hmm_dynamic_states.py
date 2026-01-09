@@ -1,8 +1,7 @@
 """Plot group-average HMM networks.
 
 """
-# Run in osld_tf environment on lucky 3 
-# or osld environment on windows
+# Run in osld environment on linux and windows
 
 import os
 import numpy as np
@@ -11,7 +10,7 @@ from pathlib import Path
 import pickle
 import seaborn as sns
 
-system='windows'
+system='linux'
 
 plot_psds = True
 plot_pow_maps = True
@@ -22,16 +21,16 @@ plot_trans_prob = True
 plot_sum_stats = True
 plot_state_time_course = True
 
-if system == 'lucky3':
+if system == 'linux':
     # set working directory
-    base_dir = Path('/home/carinaf/tms_mdd')
+    base_dir = Path('/home/carinaf/canonical_hmm_finalsample')
 elif system == 'windows':
     # Windows home dir
     base_dir = Path("L:/Lab_LucaC/Carina/")
 else:
-    "No system path defined *windows* or *lucky3*"
+    "No available system path defined *windows* or *linux*"
 
-save_dir = Path(f'{base_dir}/80patients_newmodels_giles_plots')
+save_dir = Path(f'{base_dir}/hmm_fits_05Hzcanonical_1Hzfiltered')
 
 # Source reconstruction files
 mask_file = "MNI152_T1_8mm_brain.nii.gz"
@@ -39,7 +38,7 @@ parcellation_file = "fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii
 
 # New order for states
 #order = [3, 5, 7, 0, 1, 6, 9, 8, 4, 2] # Chet reordered based on power
-n_states = [8]
+n_states = [6, 8, 10]
 n_sessions = 1
 
 for state in n_states:
@@ -83,12 +82,13 @@ for state in n_states:
                     x_label="Frequency (Hz)",
                     y_label="PSD (a.u.)",
                     x_range=[f[0], f[-1]],
-                    y_range=[0, 0.5],
+                    y_range=[0, 0.21],
                     plot_kwargs={"color": "black", "linestyle": "--"},
                     fig_kwargs={"figsize": (4, 6)} 
                 )
                 ax.plot(f, p[i], color=colors[i]) #*wb_comp[0,:]
-                ax.set_yticks([0, 0.25, 0.5])
+                ax.set_yticks([0, 0.1, 0.2])
+                ax.set_xticks([1, 10, 20, 30, 40])
                 plt.show()
                 plotting.save(fig, f"{save_dir_plots}/psd_{i:02d}_{ses}.svg", 
                 tight_layout=True)
@@ -263,7 +263,7 @@ for state in n_states:
             np.fill_diagonal(tp_masked, np.nan)
 
             # Define state labels (1 to 8)
-            states = np.arange(1, 9)
+            states = np.arange(1, state+1)
 
             # ---------- Plot off-diagonal ----------
             fig, ax = plt.subplots(figsize=(7, 6))
@@ -355,8 +355,8 @@ for state in n_states:
                 )
 
             # Plot the distribution of fractional occupancy (FO) across subjects
-            plotting.plot_violin(sr.T, x_label="HMM State", y_label="Switch Rate", sns_kwargs={'palette': colors},
-                                filename=f"{save_dir_plots}/sr_{ses}_{state}.svg")
+            plotting.plot_violin(fo.T, x_label="HMM State", y_label="Fractional Occupancies", sns_kwargs={'palette': colors},
+                                filename=f"{save_dir_plots}/fo_{ses}_{state}.svg")
 
 
         if plot_state_time_course:
