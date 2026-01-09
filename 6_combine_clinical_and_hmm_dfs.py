@@ -5,28 +5,35 @@ from pathlib import Path
 import os
 import re
 import glob
+
 # run in base python (3.12)
 
-# set working directory
-os.chdir(Path("L:/Lab_LucaC"))
+system='linux'
 
-base_dir = os.getcwd()
+if system == 'linux':
+    # set working directory
+    base_dir = Path('/home/carinaf/LabData')
+elif system == 'windows':
+    # Windows home dir
+    base_dir = Path("L:")
+else:
+    "No available system path defined *windows* or *linux*"
 
-n_states = 8
 # where are the HMM summary stats stored
-hmm_dir = Path(f'{base_dir}/Carina/plots_giles_filtered3Hz')
-# where are the source recos stored? this is the patient ID base
-prep_dir = Path(f'{base_dir}/Carina/prepared_giles_filtered3Hz')
+hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
 
-for st in [6,8,10,12]:
-    save_summary_stats_df(patients_clean=True, n_states=st)
+# where are the source recos stored? this is the patient ID base
+prep_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/prepared_data_giles_05Hz_1Hzfiltereddata')
+
+for st in [6, 8, 10]:
+    save_summary_stats_df(6, st)
 
 def match_hads_to_eeg_session():
     """we know the date but not the time of the hads conducted, so we can match
     hads to eeg recordings based on data"""
 
     # Define the directory where the Excel files are stored
-    clinical_dir = f'{base_dir}/A_QNC_Databank/Participants_Clinical_TMS_Data'
+    clinical_dir = f'{base_dir}/Lab_LucaC/A_QNC_Databank/Participants_Clinical_TMS_Data'
 
     # Pattern: anything before "Anonymised QNC Clinical Data.csv"
     pattern = f"{clinical_dir}/*MDD Anonymised QNC Clinical Data.xlsx"
@@ -49,7 +56,7 @@ def match_hads_to_eeg_session():
     df_hads = df_hads.dropna(subset=['Date Completed'])
 
     # Load EEG data file paths
-    eeg_dir = Path(f"{base_dir}/A_QNC_ANT_Data/TMS_MDD_EEG_data")
+    eeg_dir = Path(f"{base_dir}/Lab_LucaC/A_QNC_ANT_Data/TMS_MDD_EEG_data")
     eeg_files = list(eeg_dir.rglob("*.vhdr"))
 
     eeg_data = []
@@ -144,12 +151,12 @@ def match_hads_to_eeg_session():
     return matched_df
 
 
-def save_summary_stats_df(n_sessions: int = 6, n_states: int = n_states, patients_clean: bool = False):
+def save_summary_stats_df(n_sessions: int = 6, n_states: int = None):
 
     matched_df = match_hads_to_eeg_session()
 
     # load dataframe (contains hads, madrs, hama including subscales and demographics)
-    df = pd.read_csv(f'{base_dir}/Carina/clinical_demo_combined.csv')
+    df = pd.read_csv(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/clinical_demo_combined_012026.csv')
 
     # HADS scores we want to match to EEG sessions
     hads_cols = [c for c in df.columns if 'hads' in c.lower()]
