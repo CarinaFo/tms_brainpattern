@@ -12,9 +12,7 @@ using FSL and the osl-ephys package.
 # if you run on a headless server set this: export PYVISTA_OFF_SCREEN=true
 
 import pandas as pd
-import numpy as np
 import os
-import mne
 from pathlib import Path
 
 import osl_ephys
@@ -144,23 +142,23 @@ if __name__ == "__main__":
         - beamform_and_parcellate:
             freq_range: [1, 40]
             chantypes: eeg
-            #reg: 0.05 # regularize for rank deficiencies
+            reg: 0.05 # regularize for rank deficiencies
             rank: {eeg: 50}# rank should be higher than parcels
             parcellation_file: parcellations/fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii
             method: spatial_basis
             orthogonalisation: symmetric
     """
 
-    #client = Client(threads_per_worker=1, n_workers=10)
+    client = Client(threads_per_worker=1, n_workers=10)
 
-    #osl_ephys.source_recon.run_src_batch(
-     #     config,
-     #     outdir = outdir,
-     #     subjects= list(ordered_dict.keys()),
-     #     smri_files = list(ordered_dict.values()),
-     #     preproc_files = preproc_files,
-     #     dask_client=True
-    #)
+    osl_ephys.source_recon.run_src_batch(
+          config,
+          outdir = outdir,
+          subjects= list(ordered_dict.keys()),
+          smri_files = list(ordered_dict.values()),
+          preproc_files = preproc_files,
+          dask_client=True
+    )
 
 #for i in range(len(preproc_files)):
 #         osl_ephys.source_recon.run_src_chain(
@@ -171,10 +169,10 @@ if __name__ == "__main__":
 #           preproc_file = preproc_files[i]
 #          )
          
-osl_ephys.source_recon.run_src_chain(
-    config,
-    outdir = outdir,
-    subject = list(ordered_dict.keys())[0],
-    smri_file = list(ordered_dict.values())[0],
-    preproc_file = preproc_files[0]
-)
+# osl_ephys.source_recon.run_src_chain(
+#     config,
+#     outdir = outdir,
+#     subject = list(ordered_dict.keys())[0],
+#     smri_file = list(ordered_dict.values())[0],
+#     preproc_file = preproc_files[0]
+# )
