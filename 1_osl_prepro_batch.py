@@ -149,20 +149,7 @@ if __name__ == "__main__":
             #- custom_ica: {apply: true, n_components: 30, picks: eeg} # mne wrapper for fastica
             - interpolate_bads: {reset_bads: false} # keep information about bad channels in info # mne anonymous (runs mne function directly)
             - drop_channels: {ch_names: ['HEOG', 'ICA-VEOG', 'ICA-HEOG'], on_missing: 'ignore'} # mne anonymous
-            - set_eeg_reference: {projection: true} # mne anonymous
-            """
-
-            
-    # configure settings post manual correction
-    config_text_post = """
-            preproc:
-            - create_heog: None # create horizontal eye movements channel (extra function)
-            - set_channel_types: {HEOG: eog, 1RC: eog, 1LC: eog} # mne wrapper
-            - filter: {l_freq: 0.25, h_freq: 50, method: iir, iir_params: {order: 5, ftype: butter}} # mne wrapper
-            - custom_ica: {n_components: 0.99, picks: 'eeg'} # mne wrapper for fastica
-            - interpolate_bads: {reset_bads: False} # keep information about bad channels in info # mne anonymous (runs mne function directly)
-            - drop_channels: {ch_names: ['HEOG', 'ICA-VEOG', 'ICA-HEOG'], on_missing: 'ignore'} # mne anonymous
-            - set_eeg_reference: {projection: true} # mne anonymous
+            - set_eeg_reference: {projection: true} # mne anonymous, average reference projection
             """
 
     client = Client(threads_per_worker=1, n_workers=10)
