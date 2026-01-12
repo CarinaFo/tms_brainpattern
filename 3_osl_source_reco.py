@@ -1,25 +1,26 @@
-"""Coregisteration of individudal T1 image to EEG montage
-using FSL and the osl-ephys package.
+"""This script runs source localisation usinf fsl (prerequiste)
+and osl-ephys code to coregister the T1 image to the EEG data, beamform the data
+and parcellate the data.
+This scripts runs on linux, ubuntu and needs offscreen rendering abilities if you want to generate reports.
 """
 
 # Authors: Chetan Gohil <chetan.gohil@psych.ox.ac.uk>
 #          Carina Forster <carina.forster@qimrb.edu.au>
 
-# run in osl-e on Linux (!! does not work in windows !!)
+# run in osle environment on Linux (!! does not work in windows !!)
 # get the latest developer version
 #pip install git+https://github.com/OHBA-analysis/osl-ephys.git
 
-# if you run on a headless server set this: export PYVISTA_OFF_SCREEN=true
+import os
+os.environ["PYVISTA_OFF_SCREEN"] = "true"
+
+from osl_ephys import source_recon
 
 import pandas as pd
-import os
 from pathlib import Path
-
-import osl_ephys
 import re
-from dask.distributed import Client
 
-# run in osle environment on neurov02 (requires tensorflow, currently only on linux setup)
+# run in osld environment on neurov02 (requires tensorflow, currently only on linux setup)
 print(f'we have {os.cpu_count()} CPUs')
 
 # restrict to one thread
@@ -29,11 +30,10 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 # setup FSL
-osl_ephys.source_recon.setup_fsl('/home/carinaf/fsl')
+source_recon.setup_fsl('/home/carinaf/fsl')
 
 glasser_parcellation = 'Glasser52_binary_space-MNI152NLin6_res-8x8x8.nii'
 giles_39 = 'fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii'
-
 
 # set working directory (L drive is too slow)
 home_dir = '/home/carinaf/canonical_hmm_finalsample'
@@ -111,8 +111,6 @@ ordered_dict = {
     if id_ in eeg_mri_mapping
 }
 
-# 5 patients have no individual MRI scan
-
 # make sure the preprocessed files and the MRI's are aligned
 assert list(ordered_dict.keys()) == ordered_ids
 assert len(ordered_dict) == len(preproc_files)
@@ -123,56 +121,41 @@ missing_eeg = set(eeg_mri_mapping) - set(ordered_ids)
 assert not missing_mri, f"Missing MRI for: {missing_mri}"
 assert not missing_eeg, f"Missing EEG for: {missing_eeg}"
 
-if __name__ == "__main__":
-
+if __name__ == '__main__':
+     
     config = """
-        source_recon:
-        - extract_polhemus_from_info:
-            include_eeg_as_headshape: true
-        - compute_surfaces:
-            include_nose: false
-        - coregister:
-            use_nose: false
-            use_headshape: true
-            n_init: 3
-        - forward_model:
-            model: Triple Layer
-            eeg: true
-            allow_smri_scaling: true
-        - beamform_and_parcellate:
-            freq_range: [1, 40]
-            chantypes: eeg
-            reg: 0.05 # regularize for rank deficiencies
-            rank: {eeg: 50}# rank should be higher than parcels
-            parcellation_file: parcellations/fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii
-            method: spatial_basis
-            orthogonalisation: symmetric
+    source_recon:
+    - extract_polhemus_from_info:
+        include_eeg_as_headshape: true
+    - compute_surfaces:
+        include_nose: false
+        use_qform: true
+    - coregister:
+        use_nose: false
+        use_headshape: true
+    - forward_model:
+        model: Triple Layer
+        eeg: true
+        allow_smri_scaling: true
+    - beamform_and_parcellate:
+        freq_range: [1, 40]
+        chantypes: eeg
+        rank: {eeg: 50}
+        parcellation_file: parcellations/fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii
+        method: spatial_basis
+        orthogonalisation: symmetric
     """
+    from dask.distributed import Client
 
     client = Client(threads_per_worker=1, n_workers=10)
 
-    osl_ephys.source_recon.run_src_batch(
+    source_recon.run_src_batch(
           config,
           outdir = outdir,
           subjects= list(ordered_dict.keys()),
           smri_files = list(ordered_dict.values()),
           preproc_files = preproc_files,
-          dask_client=True
+          dask_client=True, # run in parallel (check workers before sending of script)
+          gen_report=True # might crash, depending on your server situation (headless server etc.)
     )
-
-#for i in range(len(preproc_files)):
-#         osl_ephys.source_recon.run_src_chain(
-#            config,
-#             outdir = outdir,
-#           subject = list(ordered_dict.keys())[i],
-#           smri_file = list(ordered_dict.values())[i],
-#           preproc_file = preproc_files[i]
-#          )
-         
-# osl_ephys.source_recon.run_src_chain(
-#     config,
-#     outdir = outdir,
-#     subject = list(ordered_dict.keys())[0],
-#     smri_file = list(ordered_dict.values())[0],
-#     preproc_file = preproc_files[0]
-# )
+        
