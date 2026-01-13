@@ -10,7 +10,20 @@ import seaborn as sns
 import ptitprince as pt
 
 import statsmodels.formula.api as smf
-from scipy.stats import zscore
+
+# setting for nature publishing
+plt.rcParams['pdf.fonttype']=42
+
+
+plt.rcParams.update({
+    "font.family": "Arial",  # Nature preference
+    "font.size": 14,
+    "axes.labelsize": 18,
+    "axes.titlesize": 18,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
+})
 
 # --------------------------------------------------
 # Configuration
@@ -119,9 +132,6 @@ def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
 
     print(f"LR χ²({df_diff}) = {lr_stat:.2f}, p = {p_value:.4f}")
 
-
-
-
     # Group by patient and session, then get the dep_hads score
     var_per_session = df.groupby(['patient', 'session'])[outcome_variable].first().reset_index()
     
@@ -164,8 +174,8 @@ def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
             linewidth=2
         )
 
-        plt.ylabel(f"HADS-D", fontsize=18)
-        plt.xlabel("Treatment timepoint", fontsize=18)
+        plt.ylabel(f"HADS-D")
+        plt.xlabel("Treatment timepoint")
         sns.despine()
 
         plt.tight_layout()
@@ -213,7 +223,7 @@ def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
     sns.set_theme(style="whitegrid")
     plt.rcParams['font.family'] = 'Arial'
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(7.1, 6))
 
     ax = pt.RainCloud(
         x="session",
@@ -245,16 +255,15 @@ def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
 
     # Styling
     ax.yaxis.grid(True, linestyle="--", linewidth=0.7, alpha=0.6)
-    ax.set_xlabel("Treatment timepoint", fontsize=22, labelpad=10)
-    ax.set_ylabel("HADS-D", fontsize=22, labelpad=10)
+    ax.set_xlabel("Treatment timepoint", labelpad=10)
+    ax.set_ylabel("HADS-D", labelpad=10)
 
     ax.set_yticks([0, 10, 20])
-    ax.set_yticklabels([0, 10, 20], fontsize=18)
+    ax.set_yticklabels([0, 10, 20])
     ax.set_ylim(-1, 22)
 
     ax.set_xticklabels(
-        [s.replace("week ", "Week ").title() for s in session_order],
-        fontsize=18
+        [s.replace("week ", "Week ").title() for s in session_order]
     )
 
     ax.spines["top"].set_visible(False)
