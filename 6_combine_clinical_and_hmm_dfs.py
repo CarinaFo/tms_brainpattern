@@ -8,7 +8,7 @@ import glob
 
 # run in base python (3.12)
 
-system='linux'
+system='windows'
 
 if system == 'linux':
     # set working directory
@@ -261,6 +261,6 @@ def save_summary_stats_df(n_sessions: int = 6, n_states: int = None):
 
     df_eeg['group'] = df_eeg['diagnostic type'].map({1: 1, 2: 2, 3: 3, 4: 3})
 
-    df_eeg.to_csv(Path(f"{prep_dir}/hmm_demo_quest_{n_states}.csv"), index=False)
+    df_eeg.to_csv(Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv"), index=False)
     
     return "saved big dataframe"
