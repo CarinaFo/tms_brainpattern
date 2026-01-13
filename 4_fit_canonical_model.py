@@ -26,11 +26,11 @@ os.chdir(Path('/home/carinaf/canonical_hmm_finalsample'))
 basedir = os.getcwd()
 source_dir = os.path.join(basedir, "source_reco_giles_parcel")
 prep_dir = os.path.join(basedir, "prepared_data_giles_1Hz_3Hzfiltereddata")
-save_dir = os.path.join(basedir, "hmm_fits_1Hz_canonical_data3Hzfiltered")
+save_dir = os.path.join(basedir, "hmm_fits_1Hzcanonical_3Hzfiltered")
 os.makedirs(save_dir, exist_ok=True)
 os.makedirs(prep_dir, exist_ok=True)
 
-missing_clinical_data = ['087', '112', '215', '217', '218', '220', '221', '222', '223'] # 9 patients
+missing_clinical_data = ['087', '112', '159', '215', '217', '218', '220', '221', '222', '223'] # 10 patients
 
 noisy_eeg = ['117', '143', '160', '169', '179']
 
@@ -93,7 +93,7 @@ def save_prep_data(parcellation: str = '38ROI_Giles'):
 
     # Create DataFrame with IDs and placeholder for patient data
     df = pd.DataFrame({
-        'patient_id': pd.unique(ids_after_exclusion)
+        'patient_id': pd.unique(pd.Series(ids_after_exclusion))
     })
 
     print(f'{len(pd.unique(pd.Series(ids_after_exclusion)))} patients prepared')
@@ -240,7 +240,7 @@ def save_spectral(session_idx: int = 0, n_states: int = 6):
         sampling_frequency=250,
         time_half_bandwidth=4,
         n_tapers=7,
-        frequency_range=[1, 40],
+        frequency_range=[3, 40],
         return_weights=True,
         n_jobs=16,
         standardize=True
@@ -277,7 +277,7 @@ def compare_free_energy(session_idx: int, n_states: int):
 
 
 n_sessions = 6
-states = [8]
+states = [6, 8, 10]
 
 session_free_energy_states = []
 
@@ -287,16 +287,16 @@ for st in states:
         save_state_probabilities(i, st)
         save_hmm_features(i, st)
         save_spectral(i, st)
-        #patient_fe = compare_free_energy(i, st)
-        #session_free_energy.append(patient_fe)
-    #session_free_energy_states.append(session_free_energy)
+        patient_fe = compare_free_energy(i, st)
+        session_free_energy.append(patient_fe)
+    session_free_energy_states.append(session_free_energy)
 
 fe_array = np.squeeze(np.array(session_free_energy_states))
 
 # free energy should decrease with model complexity
 means = np.mean(fe_array, axis=1)
 plt.figure(figsize=(8, 5))
-plt.plot([6, 8, 10, 12], means, 'ro-', linewidth=2, markersize=8)
+plt.boxplot([6, 8, 10], means)
 plt.xlabel('Number of HMM States')
 plt.ylabel('Mean Free Energy')
 plt.title('Free Energy vs Model Complexity')
@@ -305,7 +305,7 @@ plt.grid(True, alpha=0.3)
 plt.show()
 
 # Print the values
-for i, states in enumerate([6, 8, 10, 12]):
+for i, states in enumerate([6, 8, 10]):
     print(f"{states} states: {means[i]:.3f}")
 
 investigate_free_energy(session_free_energy)
