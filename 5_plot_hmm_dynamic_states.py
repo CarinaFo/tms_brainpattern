@@ -1,8 +1,7 @@
 """Plot group-average HMM networks.
 
 """
-# Run in osld environment on linux and windows
-
+# Run in osld environment on linux or windows
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -38,7 +37,7 @@ parcellation_file = "fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii
 
 # New order for states
 #order = [3, 5, 7, 0, 1, 6, 9, 8, 4, 2] # Chet reordered based on power
-n_states = [6, 8, 10]
+n_states = [10]
 n_sessions = 1
 
 for state in n_states:
@@ -82,15 +81,15 @@ for state in n_states:
                     x_label="Frequency (Hz)",
                     y_label="PSD (a.u.)",
                     x_range=[f[0], f[-1]],
-                    y_range=[0, 0.21],
+                    y_range=[0, 0.35],
                     plot_kwargs={"color": "black", "linestyle": "--"},
-                    fig_kwargs={"figsize": (4, 6)} 
+                    #fig_kwargs={"figsize": (8, 12)} 
                 )
                 ax.plot(f, p[i], color=colors[i]) #*wb_comp[0,:]
-                ax.set_yticks([0, 0.1, 0.2])
-                ax.set_xticks([1, 10, 20, 30, 40])
+                ax.set_yticks([0, 0.1, 0.2, 0.3])
+                ax.set_xticks([10, 20, 30, 40])
                 plt.show()
-                plotting.save(fig, f"{save_dir_plots}/psd_{i:02d}_{ses}.svg", 
+                plotting.save(fig, f"{save_dir_plots}/psd_{i:02d}_{ses}.png", 
                 tight_layout=True)
 
         if plot_pow_maps:
@@ -123,7 +122,7 @@ for state in n_states:
                 mean_weights=gfo,
                 #plot_kwargs={'hemispheres': ['left'], 'views': ['lateral'], 'cbar_tick_format': '%.2f'},
                 #'cmap': 'coolwarm'}, #'PuOr'
-                filename=f"{save_dir_plots}/pow_{ses}.png",
+                filename=f"{save_dir_plots}/pow_{ses}_.png",
                 component=0
             )
 
@@ -151,14 +150,15 @@ for state in n_states:
             gfo = np.average(fo, axis=0, weights=w)
             c -= np.average(c, axis=0, weights=gfo)
             c = connectivity.threshold(c, percentile=95, absolute_value=True)
+            # round for plotting
+            c_rounded = c.astype(float).round(3)
 
             # Plot
             connectivity.save(
-                c,
+                c_rounded,
                 parcellation_file=parcellation_file,
-                plot_kwargs={"display_mode": "z", "annotate": False, 'edge_cmap': 'coolwarm', 'colorbar': False},  
-                filename=f"{save_dir_plots}/coh_{ses}.svg",
-                component=0
+                #plot_kwargs={"display_mode": "z", "annotate": False, 'edge_cmap': 'coolwarm', 'colorbar': False},  
+                filename=f"{save_dir_plots}/coh_{ses}_.png"
             )
 
         if plot_coh_maps:
@@ -229,7 +229,7 @@ for state in n_states:
                 labels=[f"State {i}" for i in range(1, state+1)],
                 x_label="Power",
                 y_label="Coherence",
-                filename=f"{save_dir_plots}/pow_vs_coh_parcels_{ses}_{state}.svg",
+                filename=f"{save_dir_plots}/pow_vs_coh_parcels_{ses}_{state}.png",
                 title='parcel'
             )
 
@@ -244,7 +244,7 @@ for state in n_states:
                 labels=[f"State {i}" for i in range(1, state+1)],
                 x_label="Power (a.u.)",
                 y_label="Mean Coherence",
-                filename=f"{save_dir_plots}/pow_vs_coh_subjects_{ses}_{state}.svg",
+                filename=f"{save_dir_plots}/pow_vs_coh_subjects_{ses}_{state}.png",
                 title='subjects'
             )
 
@@ -293,7 +293,7 @@ for state in n_states:
             ax.set_title("Transition Probability Matrix", fontsize=22, pad=20)
 
             plt.tight_layout()
-            plt.savefig(f"{save_dir_plots}/trans_prob_{ses}_{state}.svg")
+            plt.savefig(f"{save_dir_plots}/trans_prob_{ses}_{state}.png")
             plt.show()
             plt.close()
 
@@ -302,7 +302,7 @@ for state in n_states:
             fig, ax = plt.subplots(figsize=(4, 8))
 
             # Plot diagonal as a single-column heatmap
-            im = ax.matshow(diag[:, np.newaxis], cmap="Greys")
+            im = ax.matshow(diag[:, np.newaxis], cmap="viridis")
 
             divider = make_axes_locatable(ax)
             cax = divider.append_axes("right", size="50%", pad=0.25)
@@ -318,7 +318,7 @@ for state in n_states:
             ax.set_title("Self-Transitions", fontsize=22, pad=20)
 
             plt.tight_layout()
-            plt.savefig(f"{save_dir_plots}/trans_prob_diag_{ses}_{state}.svg")
+            plt.savefig(f"{save_dir_plots}/trans_prob_diag_{ses}_{state}.png")
             plt.show()
             plt.close()
 
@@ -351,12 +351,12 @@ for state in n_states:
                 )
             else:
                 plotting.plot_hmm_summary_stats(
-                    fo, lt, intv, sr, cmap=colors, filename=f"{save_dir_plots}/sum_stats__{ses}_{state}.svg",
+                    fo, lt, intv, sr, cmap=colors, filename=f"{save_dir_plots}/sum_stats__{ses}_{state}.png",
                 )
 
             # Plot the distribution of fractional occupancy (FO) across subjects
             plotting.plot_violin(fo.T, x_label="HMM State", y_label="Fractional Occupancies", sns_kwargs={'palette': colors},
-                                filename=f"{save_dir_plots}/fo_{ses}_{state}.svg")
+                                filename=f"{save_dir_plots}/fo_{ses}_{state}.png")
 
 
         if plot_state_time_course:
@@ -390,4 +390,4 @@ for state in n_states:
             else:
                 for idx in indices:
                     plotting.plot_alpha(stc[idx], cmap='tab20',
-                    filename=f"{save_dir_plots}/stc_{idx}_{ses}_{state}.svg")
+                    filename=f"{save_dir_plots}/stc_{idx}_{ses}_{state}.png")
