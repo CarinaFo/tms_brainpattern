@@ -10,16 +10,39 @@ import os
 from scipy.stats import zscore
 
 #plotting
+from statsmodels.graphics.regressionplots import plot_partregress
 import seaborn as sns
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
-# setup paths
-home_dir = Path("L:/Lab_LucaC/Carina/")
 
-hmm_dir = Path(f"{home_dir}/prepared_giles_filtered3Hz")
+# setting for nature publishing
+plt.rcParams['pdf.fonttype']=42
+
+plt.rcParams.update({
+    "font.family": "Arial",  # Nature preference
+    "font.size": 14,
+    "axes.labelsize": 18,
+    "axes.titlesize": 18,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
+})
+
+# run in base python (3.12)
+system='windows'
+
+if system == 'linux':
+    # set working directory
+    base_dir = Path('/home/carinaf/LabData')
+elif system == 'windows':
+    # Windows home dir
+    base_dir = Path("L:")
+else:
+    "No available system path defined *windows* or *linux*"
+
+# where are the HMM summary stats stored
+hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
+
 fig_dir = Path(f'{hmm_dir}/figures')
-
-cycles_df = pd.read_csv(f'{hmm_dir}/df_includingcycles.csv')
 
 if not fig_dir.exists():
     os.makedirs(fig_dir, exist_ok=True)
@@ -35,38 +58,20 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
 
     print(len(unique_ids))
 
-    # exclude repeater IDs and very noisy IDs
-    exclude_ids = [ "127", '159', "182", '215']
-    removed_ids = [list(unique_ids).index(i) for i in exclude_ids]
-
-    df = df[~df["patient"].isin(exclude_ids)]
+    # exclude patients that repeated TMS treatment?
     if exclude_repeater:
         repeater_ids = [i for i in unique_ids if "R" in str(i)]
+        print(f'{len(repeater_ids)} patients repeated the treatment')
         repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
         df = df[~df["patient"].str.contains("R")]
-        drop_indices = removed_ids + repeater_positions
-
-    drop_indices = removed_ids
-    np.save(f'{hmm_dir}/dropped_indices.npy', np.array(drop_indices))
+        drop_indices = repeater_positions
+        np.save(f'{hmm_dir}/dropped_indices.npy', np.array(drop_indices))
 
     print(f"Analyzing {df['patient'].nunique()} patients")
+
     # unique patients AFTER filtering
     patient_ids = df["patient"].unique()
     print(f"Total patients: {len(patient_ids)}")
-
-    rng = np.random.default_rng(seed=42)  # reproducible
-    rng.shuffle(patient_ids)
-
-    half = len(patient_ids) // 2
-
-    patients_A = patient_ids[:half]
-    patients_B = patient_ids[half:]
-
-    df_A = df[df["patient"].isin(patients_A)]
-    df_B = df[df["patient"].isin(patients_B)]
-
-    df=df_B
-    df=df_A
 
     df["state"] = df["state"] + 1  # we want states starting from 1
 
@@ -86,6 +91,64 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
 
     plot_demographics(df)
 
+    metrics = ["fo", "sr", "lt", "intv"]
+
+    # Average across sessions
+    df_avg = (
+        df
+        .groupby(["patient", "state"])[metrics]
+        .mean()
+        .reset_index()
+    )
+
+    states = sorted(df_avg["state"].unique())
+    n_states = len(states)
+
+    # Layout: 2 rows x 5 columns
+    n_rows = 2
+    n_cols = 5
+
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(18, 7),
+        constrained_layout=True
+    )
+
+    # Mask diagonal
+    mask = np.eye(len(metrics), dtype=bool)
+
+    axes = axes.flatten()
+
+    for ax, state in zip(axes, states):
+        corr = (
+            df_avg[df_avg["state"] == state][metrics]
+            .corr(method="spearman")
+        )
+
+        sns.heatmap(
+            corr,
+            mask=mask,
+            ax=ax,
+            vmin=-1, vmax=1,
+            cmap="viridis",
+            annot=True, fmt=".2f",
+            square=True,
+            cbar=False
+        )
+
+        ax.set_title(f"State {state}", fontsize=20)
+        ax.tick_params(labelsize=18)
+
+    # Add a single shared colorbar
+    #cbar_ax = fig.add_axes([0.92, 0.25, 0.015, 0.5])
+    #sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(-1, 1))
+    #sm.set_array([])
+    #fig.colorbar(sm, cax=cbar_ax, label="Spearman ρ")
+
+    plt.savefig(f"{fig_dir}/hmm_summary_stats_correlations.svg")
+    plt.savefig(f"{fig_dir}/hmm_summary_stats_correlations.png", dpi=300)
+    plt.show()
+
     return df
 
 
@@ -95,7 +158,7 @@ def run_PCA(n_states):
 
     df = df[df['group'].isin([1,2,3])]
 
-    metrics = ['fo']#, 'lt', 'sr', 'intv']
+    metrics = ['fo'] # 'lt', 'sr', 'intv']
 
     # Pivot: one row per patient/session/tms, columns = state × metric
     df_wide = df.pivot_table(
@@ -128,12 +191,9 @@ def run_PCA(n_states):
     # Explained variance
     explained = np.cumsum(pca.explained_variance_ratio_) * 100
     print("Cumulative explained variance (%):", explained)
-
-    # plot variance explained (knee plot)
     plot_variance_explained(explained)
 
-    # plot PC loadings
-    plot_loadings(pca, feature_cols, feature_names, 'PC2')
+    plot_pca_summary(pca, explained, feature_cols, feature_names)
 
     # save the first 3 PCAs
     pca_df = pd.DataFrame(X_pca[:, :3], columns=[f"PC{i+1}" for i in range(3)])
@@ -151,6 +211,8 @@ def run_PCA(n_states):
     # drop state (no longer needed)
     df_clean = df_merged.drop(columns=['state'])
     df_clean = df_clean.drop_duplicates(subset=['patient', 'session', 'tms'])
+
+    # zscore and remove outlier
     df_removeoutlier = df_clean[
     (np.abs(zscore(df_clean['PC2'], nan_policy='omit')) < 3) &
     (np.abs(zscore(df_clean['hads_dep_total'], nan_policy='omit')) < 3)
@@ -158,62 +220,16 @@ def run_PCA(n_states):
 
     # does PC predict hads score in session 1
     df_sess1_pre = df_removeoutlier.query("session == 1 and tms == 'pre'")
-    model = smf.ols("PC3 ~ hads_dep_total  + age + gender + years_with_depression", data=df_sess1_pre).fit()
+    model = smf.ols("PC1 ~ hads_dep_total + age + gender + years_with_depression + group", data=df_sess1_pre).fit()
     print(model.summary())
 
-    # does cycle strength predict hads score in session 1
-    df_sess1_pre = cycles_df.query("session == 2 and tms == 'pre'")
-    model = smf.ols("hads_dep_total ~ cycle_rate + age + gender + years_with_depression", data=df_sess1_pre).fit()
-    print(model.summary())
-
-    # plot quick regression plot
-    ax = sns.regplot(
-        data=df_sess1_pre,
-        x='cycle_rate', y='hads_anx_total', scatter_kws={'s': 70},
-        line_kws={'color': 'black'}
-    )
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-    plt.title('Session 1 pre-TMS', fontsize=22)
-    plt.ylabel("HADS Anx", fontsize=22)
-    plt.xlabel("PC2", fontsize=22)
-    plt.tick_params(labelsize=18)
-
-    # Remove spines for clean style
-    for spine in ['top', 'right']:
-        plt.gca().spines[spine].set_visible(False)
-    plt.tight_layout()
-    plt.show()
-
-    # plot quick regression plot
-    ax = sns.regplot(
-        data=df_sess1_pre,
-        x='PC2', y='hads_anx_total', scatter_kws={'s': 70},
-        line_kws={'color': 'black'}
-    )
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-    plt.title('Session 1 pre-TMS', fontsize=22)
-    plt.ylabel("HADS Anx", fontsize=22)
-    plt.xlabel("PC2", fontsize=22)
-    plt.tick_params(labelsize=18)
-
-    # Remove spines for clean style
-    for spine in ['top', 'right']:
-        plt.gca().spines[spine].set_visible(False)
-    plt.tight_layout()
-    plt.show()
-    
     # does PC predict hads score in session 1
-    model = smf.ols("PC1 ~ hads_dep_total +  age + gender + years_with_depression", data=df_sess1_pre).fit()
+    df_sess1_pre = df_removeoutlier.query("session == 1 and tms == 'pre'")
+    model = smf.ols("PC2 ~ hads_dep_total + age + gender + years_with_depression + group", data=df_sess1_pre).fit()
     print(model.summary())
 
-    sns.regplot(
-        data=df_sess1_pre,
-        x='PC1', y='hads_dep_total'
-    )
-    plt.xlabel("HADS Depression (Session 1 Pre-TMS)")
-    plt.ylabel("PC1 (Session 1 Pre-TMS)")
-    plt.tight_layout()
-    plt.show()
+    # plot figure 2
+    plot_pca_baseline_hads(pca, df_sess1_pre, feature_cols, feature_names)
 
     return df_clean
 
@@ -239,8 +255,8 @@ def plot_pc_vs_symptom_change(n_states: int,
         wide[f'{var}_change'] = wide['pre'] - wide['post']
         return wide[['patient', 'session', f'{var}_change']]
 
-    pc1_change = compute_change(df, 'cycle_rate')
-    pc2_change = compute_change(df, 'cycle_strength')
+    pc1_change = compute_change(df, 'PC1')
+    pc2_change = compute_change(df, 'PC2')
 
     # --- Symptom change across sessions ---
     sym_wide = df.pivot_table(index='patient', columns='session', values=symptom_col).reset_index()
@@ -270,7 +286,7 @@ def plot_pc_vs_symptom_change(n_states: int,
     results = []
     models = []
 
-    for row, pc in enumerate(['cycle_rate_change', 'cycle_strength_change']):
+    for row, pc in enumerate(['PC1_change', 'PC2_change']):
         for col, (sess_change, sess_label) in enumerate(zip([1, 2], ["Session 1", "Session 2"])):
             df_s = df_merge[df_merge['session'] == sess_change].dropna(subset=['symptom_change'])
 
@@ -304,86 +320,85 @@ def plot_pc_vs_symptom_change(n_states: int,
 
 
 ### plotting functions
+def plot_pca_summary(pca, variance_explained, feature_cols, feature_names):
+    """
+    Plot PCA results as a single figure with three panels:
+    A) Variance explained (scree plot)
+    B) PC1 loadings
+    C) PC2 loadings
 
-def plot_variance_explained(variance_explained):
-        
-    # Wes Anderson–inspired palette (green + purple)
+    Parameters
+    ----------
+    pca : sklearn.decomposition.PCA object
+        Fitted PCA object
+    variance_explained : array-like
+        Cumulative explained variance of components
+    feature_cols : list
+        Original feature column names
+    feature_names : list
+        Human-readable feature names
+    """
+
+    # Wes Anderson–inspired palette
     wes_colors = {
-        "pc1":  "#7B9E89",   # muted green
-        "pc2":  "#A987B1",   # dusty lilac purple
+        "pc1": "#7B9E89",  # muted green
+        "pc2": "#A987B1",  # dusty lilac purple
     }
 
-    plt.figure(figsize=(8,6))
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))  # 1 row, 3 panels
 
-    # Plot full curve
-    plt.plot(np.arange(1, len(variance_explained)+1), variance_explained, 
+    # ---------------------
+    # Panel A: Variance Explained
+    # ---------------------
+    ax = axes[0]
+    ax.plot(np.arange(1, len(variance_explained)+1), variance_explained,
             marker='o', color='darkgrey', linewidth=3)
-
-    # Highlight first two components
-    plt.scatter(1, variance_explained[0], color=wes_colors["pc1"], s=180, zorder=3, label='PC1')
-    plt.scatter(2, variance_explained[1], color=wes_colors["pc2"], s=180, zorder=3, label='PC2')
-
-    # Labels
-    plt.xlabel('Number of Principal Components', fontsize=22)
-    plt.ylabel('Cumulative Explained Variance (%)', fontsize=22)
-
-    # Tick label sizes
-    plt.xticks(fontsize=18)
-    plt.yticks(fontsize=18)
-
-    # Remove spines for clean style
+    ax.scatter(1, variance_explained[0], color=wes_colors["pc1"], s=180, zorder=3, label='PC1')
+    ax.scatter(2, variance_explained[1], color=wes_colors["pc2"], s=180, zorder=3, label='PC2')
+    ax.set_xlabel('Number of Principal Components', fontsize=14)
+    ax.set_ylabel('Cumulative Explained Variance (%)', fontsize=14)
+    ax.tick_params(labelsize=12)
     for spine in ['top', 'right']:
-        plt.gca().spines[spine].set_visible(False)
+        ax.spines[spine].set_visible(False)
+    ax.legend(frameon=False, fontsize=12)
+    ax.set_title('A', loc='left', fontsize=16, fontweight='bold')
 
-    # Legend
-    plt.legend(fontsize=18, frameon=False)
+    # ---------------------
+    # Helper function to plot loadings
+    # ---------------------
+    def plot_loadings_ax(ax, pc, color):
+        loadings = pd.DataFrame(
+            pca.components_.T,
+            columns=[f"PC{i+1}" for i in range(pca.n_components_)],
+            index=feature_cols
+        )
+        loadings['feature_names'] = feature_names
+        loadings_pc_sorted = loadings[['feature_names', pc]].sort_values(by=pc)
+        fnames = [fname[3:] for fname in loadings_pc_sorted.feature_names]  # remove prefix if needed
+        colors = ['#d73027' if x < 0 else '#4575b4' for x in loadings_pc_sorted[pc]]
+        ax.bar(fnames, loadings_pc_sorted[pc], color=colors)
+        ax.axhline(0, color='black', linestyle='--')
+        ax.set_ylabel(f"{pc} loadings", fontsize=14, color=color)
+        ax.set_xlabel("State", fontsize=14)
+        ax.tick_params(labelsize=12)
+        for spine in ['top', 'right']:
+            ax.spines[spine].set_visible(False)
+
+    # ---------------------
+    # Panel B: PC1 loadings
+    # ---------------------
+    plot_loadings_ax(axes[1], 'PC1', wes_colors['pc1'])
+    axes[1].set_title('B', loc='left', fontsize=16, fontweight='bold')
+
+    # ---------------------
+    # Panel C: PC2 loadings
+    # ---------------------
+    plot_loadings_ax(axes[2], 'PC2', wes_colors['pc2'])
+    axes[2].set_title('C', loc='left', fontsize=16, fontweight='bold')
 
     plt.tight_layout()
-    plt.savefig(f'{fig_dir}/pca_hmm_stats_ncomponents_wes_greenpurple.png',
-                dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def plot_loadings(pca, feature_cols, feature_names, pc):
-
-    # Component loadings (which features contribute most)
-    loadings = pd.DataFrame(
-        pca.components_.T,
-        columns=[f"PC{i+1}" for i in range(pca.n_components_)],
-        index=feature_cols
-    )
-
-    loadings['feature_names'] = feature_names
-    # Wes Anderson–inspired palette (green + purple)
-    wes_colors = {
-        "pc1":  "#7B9E89",   # muted green
-        "pc2":  "#A987B1",   # dusty lilac purple
-    }
-
-    if pc == 'PC1':
-        c = wes_colors['pc1']
-    else:
-        c = wes_colors['pc2']
-
-     # Sort by PC2 while keeping feature names aligned
-    loadings_pc_sorted = loadings[['feature_names', pc]].sort_values(by=pc)
-    plt.figure(figsize=(6,8))
-    colors = ['#d73027' if x < 0 else '#4575b4' for x in loadings_pc_sorted[pc]]
-    plt.barh(loadings_pc_sorted.feature_names, loadings_pc_sorted[pc], color=colors)
-    plt.axvline(0, color='black', linestyle='--')
-    plt.xlabel(f"{pc} loadings", fontsize=22, color=c)
-    plt.ylabel("Features", fontsize=22)
-    # Feature names font size
-    plt.yticks(fontsize=18)
-    plt.xticks(fontsize=18)
-    # Remove gridlines
-    plt.grid(False)
-    # Remove spines for a clean look
-    for spine in ['top', 'right']:
-        plt.gca().spines[spine].set_visible(False)
-
-    plt.tight_layout()
-    plt.savefig(f'{fig_dir}/{pc}_loadings.png', dpi=300, bbox_inches='tight')
+    plt.savefig("pca_summary.png", dpi=300, bbox_inches='tight')
+    plt.savefig("pca_summary.svg")  # editable in Inkscape
     plt.show()
 
 
@@ -699,3 +714,118 @@ def plot_group_effects(df_clean):
     plt.legend(title='Group')
     plt.tight_layout()
     plt.show()
+
+
+def plot_variance_explained(explained):
+
+    fig, ax = plt.subplots(figsize=(7.1, 6))
+
+    ax.plot(
+        np.arange(1, len(explained) + 1),
+        explained,
+        marker='o',
+        color='darkgrey',
+        linewidth=2
+    )
+
+    ax.set_xlabel('Principal Component')
+    ax.set_ylabel('Cumulative Variance Explained (%)')
+    ax.set_xticks(np.arange(1, len(explained) + 1))
+
+    ax.text(
+        -0.15, 1.1, "A",
+        transform=ax.transAxes,
+        fontsize=20,
+        fontweight="bold",
+        va="top"
+    )
+
+    fig.tight_layout()
+
+
+
+
+def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['age', 'gender', 'years_with_depression', 'group']):
+    """
+    Plots PCA summary (variance explained + loadings) and regression of PC1/PC2
+    against HADS-D (partial regression adjusting for age and gender)
+    
+    Parameters:
+    - pca: fitted PCA object (sklearn)
+    - variance_explained: array-like, cumulative variance explained
+    - df: dataframe with PC scores and HADS-D, age, gender, session
+    - feature_cols: list of features used in PCA (e.g., states)
+    - feature_names: names of features for plotting
+    - session_filter: which session to plot regression for (default 'pre')
+    """
+    fig = plt.figure(figsize=(8, 7))
+    gs = gridspec.GridSpec(2, 2, hspace=0.4, wspace=0.4)
+
+    # ---- Colorblind-friendly palette ----
+    neg_color = '#56B4E9'  # blue
+    pos_color = '#E69F00'  # orange
+
+    # ---- Panel A: PC1 loadings ----
+    loadings = pd.DataFrame(pca.components_.T, columns=[f"PC{i+1}" for i in range(pca.n_components_)], index=feature_cols)
+    loadings['feature_names'] = feature_names
+    pc1_sorted = loadings[['feature_names','PC1']].sort_values('PC1')
+    fnames_pc1 = [f[3:] for f in pc1_sorted.feature_names]
+    colors_pc1 = [neg_color if x<0 else pos_color for x in pc1_sorted.PC1]
+
+    ax1 = fig.add_subplot(gs[0,0])
+    ax1.bar(fnames_pc1, pc1_sorted.PC1, color=colors_pc1)
+    ax1.axhline(0, color='black', linestyle='--')
+    ax1.set_xticklabels(fnames_pc1, rotation=45, ha='right')
+    ax1.set_ylabel("PC1 Loadings")
+    ax1.text(-0.15, 1.1, "A", transform=ax1.transAxes, fontsize=18, fontweight="bold", va="top")
+
+    # ---- Panel B: PC2 loadings ----
+    pc2_sorted = loadings[['feature_names','PC2']].sort_values('PC2')
+    fnames_pc2 = [f[3:] for f in pc2_sorted.feature_names]
+    colors_pc2 = [neg_color if x<0 else pos_color for x in pc2_sorted.PC2]
+
+    ax2 = fig.add_subplot(gs[0,1])
+    ax2.bar(fnames_pc2, pc2_sorted.PC2, color=colors_pc2)
+    ax2.axhline(0, color='black', linestyle='--')
+    ax2.set_xticklabels(fnames_pc2, rotation=45, ha='right')
+    ax2.set_ylabel("PC2 Loadings")
+    ax2.text(-0.15, 1.1, "B", transform=ax2.transAxes, fontsize=18, fontweight="bold", va="top")
+
+    # Make PC loadings y-axis identical
+    min_y = min(pc1_sorted.PC1.min(), pc2_sorted.PC2.min())
+    max_y = max(pc1_sorted.PC1.max(), pc2_sorted.PC2.max())
+    ax1.set_ylim(min_y, max_y)
+    ax2.set_ylim(min_y, max_y)
+    # ---- Panel D: Partial regression PC1 ~ HADS ----
+    ax3 = fig.add_subplot(gs[1, 0])
+    plot_partregress('PC1', 'hads_dep_total', covariates, data=df, obs_labels=False, ax=ax3)
+    ax3.set_xlabel("baseline HADS-D")
+    ax3.set_ylabel("baseline PC1")
+    ax3.text(
+        -0.15, 1.1, "C",
+        transform=ax3.transAxes,
+        fontsize=20,
+        fontweight="bold",
+        va="top"
+    )
+    ax3.set_title("")
+
+    # ---- Panel E: Partial regression PC2 ~ HADS ----
+    ax4 = fig.add_subplot(gs[1, 1])
+    plot_partregress('PC2', 'hads_dep_total', covariates, data=df, obs_labels=False, ax=ax4)
+    ax4.set_xlabel("baseline HADS-D")
+    ax4.set_ylabel("baseline PC2")
+    ax4.text(
+        -0.15, 1.1, "D",
+        transform=ax4.transAxes,
+        fontsize=20,
+        fontweight="bold",
+        va="top"
+    )
+    ax4.set_title("")
+
+    # Remove top/right spines for all axes
+    for ax in fig.axes:
+        for spine in ['top','right']:
+            ax.spines[spine].set_visible(False)
+    return fig
