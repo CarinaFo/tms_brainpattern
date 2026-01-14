@@ -359,9 +359,10 @@ def plot_symptom_change_correlation(df, covariates):
             ax.spines[spine].set_visible(False)
 
     plt.tight_layout()
-    plt.savefig(f'{fig_dir}/PC2_deltahads.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{fig_dir}/symptom_change_PC2FO.png', dpi=300, bbox_inches='tight')
     plt.show()
 
+    return 
 
 def plot_symptom_change(df):
 
