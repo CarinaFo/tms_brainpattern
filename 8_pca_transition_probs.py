@@ -7,90 +7,66 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
+import os
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-import statsmodels.formula.api as smf
+from statsmodels.graphics.regressionplots import plot_partregress
+from matplotlib.colors import LinearSegmentedColormap
 
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
+import statsmodels.formula.api as smf
 import statsmodels.api as sm
+from scipy.stats import zscore
 
 # --------------------------------------------------
 # Set Paths
 # --------------------------------------------------
-home_dir = Path("L:/Lab_LucaC/Carina/")
+# run in base python (3.12)
 
-tp_dir = Path(f"{home_dir}/plots_giles_filtered3Hz")
-hmm_dir = Path(f"{home_dir}/prepared_giles_filtered3Hz")
+system='windows'
+
+if system == 'linux':
+    # set working directory
+    base_dir = Path('/home/carinaf/LabData')
+elif system == 'windows':
+    # Windows home dir
+    base_dir = Path("L:")
+else:
+    "No available system path defined *windows* or *linux*"
+
+# where are the HMM summary stats stored
+hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
 
 fig_dir = Path(f'{hmm_dir}/figures')
 
-n_states = 8 
+if not fig_dir.exists():
+    os.makedirs(fig_dir, exist_ok=True)
+
+n_states = 10 
+n_sessions=6
 
 def run_PCA_on_transition_matrix(n_sessions: int, 
-                                    exclude_repeater: bool, 
                                     n_states: int):
     '''fit PCA on transition probability matrix obtained from HMM'''
     all_ses = []
 
     for ses in range(n_sessions):
         # Load TP matrix
-        tp_matrix = np.load(f'{tp_dir}/tp_{ses}_{n_states}.npy')
+        tp_matrix = np.load(f'{hmm_dir}/tp_{ses}_{n_states}.npy')
         all_ses.append(tp_matrix)
 
     transitions = np.array(all_ses) # sessions, patients, states, states
 
-    # add patient ID to transition probability dataframe
-    idlist = pd.read_csv(f"{hmm_dir}/patients_fitted_for_this_hmm.csv")
-
-    # Assuming we know the order of patients and sessions
-    patients = pd.unique(idlist['patient_id'])
-
-    # exclude repeater IDs and very noisy IDs
-    exclude_ids = ["127", "182", '159', '215']
-
-    if exclude_repeater:
-        exclude_ids += [pid for pid in patients if "R" in pid]
-    
-    # open clinical dataframe
-    csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
-
-    df = pd.read_csv(csv_path)
-
-    clinical_info_patients = pd.unique(df['patient'])
-
-    # one patient has no clinical data but EEG (didn't show up anymore after treatment)
-    id_to_drop = [item for item in idlist['patient_id'] if item not in clinical_info_patients]
-
-    exclude_ids.extend(id_to_drop)
-
-    # Identify indices to keep
-    keep_mask = ~idlist["patient_id"].isin(exclude_ids)
-    keep_indices = np.where(keep_mask)[0]
-
-    np.save(f'{tp_dir}/mask_for_cycles.npy', keep_indices)
-
-    # Filter transitions and patient list
-    transitions = transitions[:, keep_indices, :, :]
-    patients = [p for i, p in enumerate(patients) if i in keep_indices]
-
-    print(f"Analyzing {len(patients)} patients after exclusion")
-
     # save transition probabilities to disk
-    np.save(f'{tp_dir}/transition_probs.npy', transitions)
+    np.save(f'{hmm_dir}/transition_probs.npy', transitions)
 
     # Continue with reshaping
     n_sessions = transitions.shape[0]
     n_patients = transitions.shape[1]
     n_states = transitions.shape[2]
-
-    # load asymmetry matrix
-    #asym_matrix = np.load(r"L:\Lab_LucaC\Carina\asym_matrix_8states.npy")
-
-    #X = asym_matrix.reshape(n_states * n_states, 402).T
 
     X = transitions.reshape(n_sessions * n_patients, n_states * n_states)
 
@@ -112,29 +88,20 @@ def run_PCA_on_transition_matrix(n_sessions: int,
     # plot explained variance
     plot_variance_explained(cumulative_variance)
 
-    loadings = pca.components_ # shape n_patients, n_components 
+    loadings = pca.components_ # shape n_patients, n_components
 
-    # plot loadings for PC1 and PC2
-    plot_loadings(loadings, n_states=n_states, pc='PC1')
-    plot_loadings(loadings, n_states=n_states, pc='PC2')
-
-    return X, transitions, X_pca
+    return X, transitions, X_pca, pca, loadings
 
 
 def add_PCA_to_data(n_states: int):
     '''add PCs to the clinical dataframe'''
 
-    X, transitions, X_pca = run_PCA_on_transition_matrix(6, False, n_states=n_states)
+    X, transitions, X_pca, pca, loadings = run_PCA_on_transition_matrix(6, n_states=n_states)
 
     # open clinical dataframe
     csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
 
     df = pd.read_csv(csv_path)
-
-    # exclude repeater IDs and very noisy IDs (EEG after source reco very noisy)
-    exclude_ids = ["127", "182", '159', '215']
-    df = df[~df["patient"].isin(exclude_ids)]
-    #df = df[~df["patient"].str.contains("R")]
 
     print(f"Analyzing {df['patient'].nunique()} patients")
 
@@ -214,42 +181,31 @@ def add_PCA_to_data(n_states: int):
     for col in ["patient", "session", "tms", "state", "group", "responder", 'session_0to5']:
         df[col] = df[col].astype("category", errors="ignore")
 
+    # zscore and remove outlier
+    df_removeoutlier = df[
+        (np.abs(zscore(df['PC2'], nan_policy='omit')) < 3) &
+        (np.abs(zscore(df['hads_dep_total'], nan_policy='omit')) < 3)
+    ]
+
     # does PC predict hads score in session 1
-    df_sess1_pre = df[(df["session"] == 1) & (df["tms"] == "pre")]
+    df_sess1_pre = df_removeoutlier.query("session == 1 and tms == 'pre'")
 
-    model = smf.ols("PC1 ~ hads_dep_total", data=df_sess1_pre).fit()
+    model = smf.ols("PC1 ~ hads_dep_total + age + gender + years_with_depression + group", data=df_sess1_pre).fit()
     print(model.summary())
 
-    model = smf.ols("PC2 ~ hads_dep_total + group + age + gender + years_with_depression", data=df_sess1_pre).fit()
+    # does PC predict hads score in session 1
+    df_sess1_pre = df_removeoutlier.query("session == 1 and tms == 'pre'")
+    model = smf.ols("PC2 ~ hads_dep_total + age + gender + years_with_depression + group", data=df_sess1_pre).fit()
     print(model.summary())
 
-    # plot quick regression plot
-    sns.regplot(
-        data=df_sess1_pre,
-        x='hads_dep_total', y='PC2'
-    )
-    plt.xlabel("HADS Depression (Session 1 Pre-TMS)")
-    plt.ylabel("PC2 (Session 1 Pre-TMS)")
-    plt.tight_layout()
-    plt.show()
-
-    sns.regplot(
-        data=df_sess1_pre,
-        x='hads_dep_total', y='PC1'
-    )
-    plt.xlabel("HADS Depression (Session 1 Pre-TMS)")
-    plt.ylabel("PC1 (Session 1 Pre-TMS)")
-    plt.tight_layout()
-    plt.show()
-
-    # PC2 caries some meaningful variation
+    plot_pca_heatmap_baseline_hads(pca, loadings, df_sess1_pre)
 
     return df
 
 
 def plot_pc_tms_vs_symptom_change(
     symptom_col='hads_dep_total', 
-    control_vars=['age', 'gender']
+    control_vars=['age', 'gender', 'years_with_depression']
 ):
     """
     Test whether TMS-induced PC change predicts symptom change (ΔHADS-D)
@@ -257,15 +213,7 @@ def plot_pc_tms_vs_symptom_change(
     Produces separate regression plots for each PC and each session (2 and 3).
     """
 
-    df = add_PCA_to_data(n_states=8)
-
-    # --- Data prep ---
-    df['session'] = df['session'].astype(int)
-    df['gender'] = df['gender'].str.lower().map({
-            'female': 0,
-            'male': 1
-        })
-
+    df = add_PCA_to_data(n_states=10)
 
     # Function to compute Δ pre–post
     def compute_change(df, var):
@@ -334,91 +282,31 @@ def plot_pc_tms_vs_symptom_change(
 
 ### plotting functions
 
-def plot_variance_explained(variance_explained):
-    '''plot variance explained by PCs'''
-    # Wes Anderson–inspired palette (green + purple)
-    wes_colors = {
-        "pc1":  "#7B9E89",   # muted green
-        "pc2":  "#A987B1",   # dusty lilac purple
-    }
+def plot_variance_explained(explained):
 
-    plt.figure(figsize=(8,6))
+    fig, ax = plt.subplots(figsize=(7.1, 6))
 
-    # Plot full curve
-    plt.plot(np.arange(1, len(variance_explained)+1), variance_explained, 
-            marker='o', color='darkgrey', linewidth=3)
+    ax.plot(
+        np.arange(1, len(explained) + 1),
+        explained,
+        marker='o',
+        color='darkgrey',
+        linewidth=2
+    )
 
-    # Highlight first two components
-    plt.scatter(1, variance_explained[0], color=wes_colors["pc1"], s=180, zorder=3, label='PC1')
-    plt.scatter(2, variance_explained[1], color=wes_colors["pc2"], s=180, zorder=3, label='PC2')
+    ax.set_xlabel('Principal Component')
+    ax.set_ylabel('Cumulative Variance Explained (%)')
+    ax.set_xticks([30, 60, 90])
 
-    # Labels
-    plt.xlabel('Number of Principal Components', fontsize=22)
-    plt.ylabel('Cumulative Explained Variance (%)', fontsize=22)
+    ax.text(
+        -0.15, 1.1, "A",
+        transform=ax.transAxes,
+        fontsize=20,
+        fontweight="bold",
+        va="top"
+    )
 
-    # Tick label sizes
-    plt.xticks(fontsize=18)
-    plt.yticks(fontsize=18)
-
-    # Remove spines for clean style
-    for spine in ['top', 'right']:
-        plt.gca().spines[spine].set_visible(False)
-
-    # Legend
-    plt.legend(fontsize=18, frameon=False)
-
-    plt.tight_layout()
-    plt.savefig(f'{fig_dir}/pca_hmm_stats_ncomponents_wes_greenpurple.png',
-                dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def plot_loadings(loadings = None, n_states: int = None, pc: str = None):
-    '''plot PC loadings for transition matrix'''
-    from matplotlib.colors import LinearSegmentedColormap
-
-    # Wes Anderson–inspired palette (green + purple)
-    wes_colors = {
-        "pc1":  "#7B9E89",   # muted green
-        "pc2":  "#A987B1",   # dusty lilac purple
-    }
-
-    if pc == 'PC1':
-        c = wes_colors['pc1']
-        loading_pc = loadings[0,:]
-    else:
-        c = wes_colors['pc2']
-        loading_pc = loadings[1,:]
-
-    mat = np.zeros((n_states, n_states))
-    mat[~np.eye(n_states, dtype=bool)] = loading_pc
-    mat[np.eye(n_states, dtype=bool)] = np.nan  # mask diagonal
-
-    plt.figure(figsize=(8, 8))
-
-    # Custom diverging colormap: red → white → blue
-    cmap = LinearSegmentedColormap.from_list('red_blue', ['#d73027', 'white', '#4575b4'])
-
-    sns.heatmap(mat, annot=True, cmap=cmap, center=0, fmt=".2f",
-                xticklabels=[f"{j+1}" for j in range(n_states)],
-                yticklabels=[f"{i+1}" for i in range(n_states)],
-                mask=np.isnan(mat),
-                linewidths=0.5,
-                linecolor='lightgrey',
-                cbar_kws={'shrink':0.8})
-
-    # Overlay grey diagonal
-    for j in range(n_states):
-        plt.gca().add_patch(plt.Rectangle((j, j), 1, 1, fill=True, color='grey', zorder=2))
-
-    # Title and ticks
-    plt.title(f"{pc} loadings (excluding self-transitions)", fontsize=20, color=c)
-    plt.xticks(fontsize=18)
-    plt.yticks(fontsize=18, rotation=0)
-    
-    plt.tight_layout()
-    plt.savefig(f'{fig_dir}/tp_loadings_{pc}.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    fig.tight_layout()
 
 
 def plot_symptom_change_correlation(df, pc, sess_label, beta, pval):
@@ -460,3 +348,113 @@ def plot_symptom_change_correlation(df, pc, sess_label, beta, pval):
     plt.tight_layout()
     plt.savefig(f'{fig_dir}/PC2_delta_hads_tp.png', dpi=300, bbox_inches='tight')
     plt.show()
+
+
+def plot_pca_heatmap_baseline_hads(pc, loadings, df, n_states, covariates=['age', 'gender', 'years_with_depression', 'group']):
+    """
+    Plots PCA summary (variance explained + loadings) and regression of PC1/PC2
+    against HADS-D (partial regression adjusting for age and gender)
+    
+    Parameters:
+    - pca: fitted PCA object (sklearn)
+    - variance_explained: array-like, cumulative variance explained
+    - df: dataframe with PC scores and HADS-D, age, gender, session
+    - feature_cols: list of features used in PCA (e.g., states)
+    - feature_names: names of features for plotting
+    - session_filter: which session to plot regression for (default 'pre')
+    """
+    fig = plt.figure(figsize=(8, 7))
+    gs = gridspec.GridSpec(2, 2, hspace=0.4, wspace=0.4)
+
+    pc_1 = loadings[0, :]
+    pc_2 = loadings[1, :]
+
+    # ---- Colorblind-friendly palette ----
+    neg_color = '#56B4E9'  # blue
+    pos_color = '#E69F00'  # orange
+
+    # ---- Panel A: PC1 loadings ----
+    mat = np.zeros((n_states, n_states))
+    mat[~np.eye(n_states, dtype=bool)] = pc_1
+    mat[np.eye(n_states, dtype=bool)] = np.nan  # mask diagonal
+
+    # Custom diverging colormap: red → white → blue
+    cmap = LinearSegmentedColormap.from_list('orange_blue', [neg_color, 'white', pos_color])
+
+    ax1 = fig.add_subplot(gs[0, 0])
+    
+    sns.heatmap(mat, annot=False, cmap=cmap, center=0, fmt=".2f", ax=ax1,
+                xticklabels=[f"{j+1}" for j in range(n_states)],
+                yticklabels=[f"{i+1}" for i in range(n_states)],
+                mask=np.isnan(mat),
+                linewidths=0.5,
+                linecolor='lightgrey',
+                cbar_kws={'shrink':0.8})
+
+    # Overlay grey diagonal
+    for j in range(n_states):
+        plt.gca().add_patch(plt.Rectangle((j, j), 1, 1, fill=True, color='grey', zorder=2))
+
+    ax1.set_xlabel("To state")
+    ax1.set_ylabel("From state")
+    ax1.text(-0.15, 1.1, "A  PC1 loadings", transform=ax1.transAxes,
+             fontsize=18, fontweight="bold", va="top")
+    
+    # ---- Panel A: PC2 loadings ----
+    mat = np.zeros((n_states, n_states))
+    mat[~np.eye(n_states, dtype=bool)] = pc_2
+    mat[np.eye(n_states, dtype=bool)] = np.nan  # mask diagonal
+
+    ax2 = fig.add_subplot(gs[0, 1])
+    
+    sns.heatmap(mat, annot=False, cmap=cmap, center=0, fmt=".2f", ax=ax2,
+                xticklabels=[f"{j+1}" for j in range(n_states)],
+                yticklabels=[f"{i+1}" for i in range(n_states)],
+                mask=np.isnan(mat),
+                linewidths=0.5,
+                linecolor='lightgrey',
+                cbar_kws={'shrink':0.8})
+
+    # Overlay grey diagonal
+    for j in range(n_states):
+        plt.gca().add_patch(plt.Rectangle((j, j), 1, 1, fill=True, color='grey', zorder=2))
+
+    ax2.set_xlabel("To state")
+    ax2.set_ylabel("From state")
+    ax2.text(-0.15, 1.1, "B  PC2 loadings", transform=ax2.transAxes,
+             fontsize=18, fontweight="bold", va="top")
+
+    # ---- Panel D: Partial regression PC1 ~ HADS ----
+    ax3 = fig.add_subplot(gs[1, 0])
+    plot_partregress('PC1', 'hads_dep_total', covariates, data=df, obs_labels=False, ax=ax3)
+    ax3.set_xlabel("baseline HADS-D")
+    ax3.set_ylabel("baseline PC1")
+    ax3.text(
+        -0.15, 1.1, "C",
+        transform=ax3.transAxes,
+        fontsize=20,
+        fontweight="bold",
+        va="top"
+    )
+    ax3.set_title("")
+
+    # ---- Panel E: Partial regression PC2 ~ HADS ----
+    ax4 = fig.add_subplot(gs[1, 1])
+    plot_partregress('PC2', 'hads_dep_total', covariates, data=df, obs_labels=False, ax=ax4)
+    ax4.set_xlabel("baseline HADS-D")
+    ax4.set_ylabel("baseline PC2")
+    ax4.text(
+        -0.15, 1.1, "D",
+        transform=ax4.transAxes,
+        fontsize=20,
+        fontweight="bold",
+        va="top"
+    )
+    ax4.set_title("")
+
+    # Remove top/right spines for all axes
+    for ax in fig.axes:
+        for spine in ['top','right']:
+            ax.spines[spine].set_visible(False)
+
+    return fig
