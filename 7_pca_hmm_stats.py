@@ -194,8 +194,6 @@ def run_PCA(n_states):
     print("Cumulative explained variance (%):", explained)
     plot_variance_explained(explained)
 
-    plot_pca_summary(pca, explained, feature_cols, feature_names)
-
     # save the first 3 PCAs
     pca_df = pd.DataFrame(X_pca[:, :3], columns=[f"PC{i+1}" for i in range(3)])
     df_pca = pd.concat([df_wide.reset_index(drop=True), pca_df], axis=1)
@@ -237,7 +235,7 @@ def run_PCA(n_states):
 
 def plot_pc_vs_symptom_change(n_states: int,
     symptom_col='hads_dep_total', 
-    control_vars=['age', 'gender', 'years_with_depression']
+    covariates=['age', 'gender', 'years_with_depression', 'group']
 ):
     """
     Test whether TMS-induced PC1/PC2 changes predict symptom change (ΔHADS-D)
@@ -256,7 +254,6 @@ def plot_pc_vs_symptom_change(n_states: int,
         wide[f'{var}_change'] = wide['pre'] - wide['post']
         return wide[['patient', 'session', f'{var}_change']]
 
-    pc1_change = compute_change(df, 'PC1')
     pc2_change = compute_change(df, 'PC2')
 
     # --- Symptom change across sessions ---
@@ -275,169 +272,91 @@ def plot_pc_vs_symptom_change(n_states: int,
 
     # --- Merge ---
     df_merge = (
-        pc1_change
-        .merge(pc2_change, on=['patient', 'session'])
+        pc2_change
         .merge(sym_change[['patient', 'session', 'symptom_change']], on=['patient', 'session'])
     )
 
-    df_cov = df[['patient'] + control_vars].drop_duplicates()
+    df_cov = df[['patient'] + covariates].drop_duplicates()
     df_merge = df_merge.merge(df_cov, on='patient', how='left').dropna()
 
+    # zscore and remove outlier
+    df_clean = df_merge[
+    (np.abs(zscore(df_merge['PC2_change'], nan_policy='omit')) < 3) &
+    (np.abs(zscore(df_merge['symptom_change'], nan_policy='omit')) < 3)
+    ]
+
     # --- Regression & plotting ---
-    results = []
-    models = []
+    # Baseline to mid of treatment
+    df_sess1 = df_clean[df_clean['session'] == 1]
+    model = smf.ols("symptom_change ~ PC2_change + age + gender + years_with_depression + group", data=df_sess1).fit()
+    print(model.summary())
 
-    for row, pc in enumerate(['PC1_change', 'PC2_change']):
-        for col, (sess_change, sess_label) in enumerate(zip([1, 2], ["Session 1", "Session 2"])):
-            df_s = df_merge[df_merge['session'] == sess_change].dropna(subset=['symptom_change'])
+    # Mid to end of treatment
+    df_sess2 = df_clean[df_clean['session'] == 2]
+    model = smf.ols("symptom_change ~ PC2_change + age + gender + years_with_depression + group", data=df_sess2).fit()
+    print(model.summary())
 
-            X = df_s[[pc] + control_vars].copy()
-            X = pd.get_dummies(X, drop_first=True)
-            # OLS doesn't like boolean
-            X = X.replace({True: 1, False: 0})
-            X = sm.add_constant(X)
-            y = df_s['symptom_change']
+    plot_symptom_change_correlation(df_clean, covariates)
 
-            model = sm.OLS(y, X).fit()
+    # PC2 change and symptom change do not sign. correlate between session 1 and 2
 
-            models.append(model)
-
-            beta = model.params.get(pc, np.nan)
-            pval = model.pvalues.get(pc, np.nan)
-   
-            results.append({
-                'session': sess_label,
-                'predictor': pc,
-                'beta': beta,
-                'p': pval,
-                'n': len(df_s)
-            })
-
-            plot_symptom_change_correlation(df_s, pc, sess_label, beta, pval)
-
-    results_df = pd.DataFrame(results)
-
-    return df_merge, results_df
+    return
 
 
 ### plotting functions
-def plot_pca_summary(pca, variance_explained, feature_cols, feature_names):
-    """
-    Plot PCA results as a single figure with three panels:
-    A) Variance explained (scree plot)
-    B) PC1 loadings
-    C) PC2 loadings
+def plot_symptom_change_correlation(df, covariates):
 
-    Parameters
-    ----------
-    pca : sklearn.decomposition.PCA object
-        Fitted PCA object
-    variance_explained : array-like
-        Cumulative explained variance of components
-    feature_cols : list
-        Original feature column names
-    feature_names : list
-        Human-readable feature names
-    """
+    fig, (ax1, ax2) = plt.subplots(
+        1, 2,
+        figsize=(7.1, 6),
+        sharey=True,
+        gridspec_kw={"wspace": 0.4}
+    )
 
-    # Wes Anderson–inspired palette
-    wes_colors = {
-        "pc1": "#7B9E89",  # muted green
-        "pc2": "#A987B1",  # dusty lilac purple
-    }
+    # -------- Session 1 --------
+    df_sess1 = df[df['session'] == 1]
+    plot_partregress(
+        'PC2_change', 'symptom_change',
+        covariates,
+        data=df_sess1,
+        obs_labels=False,
+        ax=ax1
+    )
+    ax1.set_xlabel("Δ HADS-D")
+    ax1.set_ylabel("Δ PC2")
+    ax1.text(
+        -0.15, 1.1, "A",
+        transform=ax1.transAxes,
+        fontsize=20,
+        fontweight="bold",
+        va="top"
+    )
+    ax1.set_title("")
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))  # 1 row, 3 panels
+    # -------- Session 2 --------
+    df_sess2 = df[df['session'] == 2]
+    plot_partregress(
+        'PC2_change', 'symptom_change',
+        covariates,
+        data=df_sess2,
+        obs_labels=False,
+        ax=ax2
+    )
+    ax2.set_xlabel("Δ HADS-D")
+    ax2.set_ylabel("")  # avoid duplicate label
+    ax2.text(
+        -0.15, 1.1, "B",
+        transform=ax2.transAxes,
+        fontsize=20,
+        fontweight="bold",
+        va="top"
+    )
+    ax2.set_title("")
 
-    # ---------------------
-    # Panel A: Variance Explained
-    # ---------------------
-    ax = axes[0]
-    ax.plot(np.arange(1, len(variance_explained)+1), variance_explained,
-            marker='o', color='darkgrey', linewidth=3)
-    ax.scatter(1, variance_explained[0], color=wes_colors["pc1"], s=180, zorder=3, label='PC1')
-    ax.scatter(2, variance_explained[1], color=wes_colors["pc2"], s=180, zorder=3, label='PC2')
-    ax.set_xlabel('Number of Principal Components', fontsize=14)
-    ax.set_ylabel('Cumulative Explained Variance (%)', fontsize=14)
-    ax.tick_params(labelsize=12)
-    for spine in ['top', 'right']:
-        ax.spines[spine].set_visible(False)
-    ax.legend(frameon=False, fontsize=12)
-    ax.set_title('A', loc='left', fontsize=16, fontweight='bold')
-
-    # ---------------------
-    # Helper function to plot loadings
-    # ---------------------
-    def plot_loadings_ax(ax, pc, color):
-        loadings = pd.DataFrame(
-            pca.components_.T,
-            columns=[f"PC{i+1}" for i in range(pca.n_components_)],
-            index=feature_cols
-        )
-        loadings['feature_names'] = feature_names
-        loadings_pc_sorted = loadings[['feature_names', pc]].sort_values(by=pc)
-        fnames = [fname[3:] for fname in loadings_pc_sorted.feature_names]  # remove prefix if needed
-        colors = ['#d73027' if x < 0 else '#4575b4' for x in loadings_pc_sorted[pc]]
-        ax.bar(fnames, loadings_pc_sorted[pc], color=colors)
-        ax.axhline(0, color='black', linestyle='--')
-        ax.set_ylabel(f"{pc} loadings", fontsize=14, color=color)
-        ax.set_xlabel("State", fontsize=14)
-        ax.tick_params(labelsize=12)
+    # -------- Styling --------
+    for ax in (ax1, ax2):
         for spine in ['top', 'right']:
             ax.spines[spine].set_visible(False)
-
-    # ---------------------
-    # Panel B: PC1 loadings
-    # ---------------------
-    plot_loadings_ax(axes[1], 'PC1', wes_colors['pc1'])
-    axes[1].set_title('B', loc='left', fontsize=16, fontweight='bold')
-
-    # ---------------------
-    # Panel C: PC2 loadings
-    # ---------------------
-    plot_loadings_ax(axes[2], 'PC2', wes_colors['pc2'])
-    axes[2].set_title('C', loc='left', fontsize=16, fontweight='bold')
-
-    plt.tight_layout()
-    plt.savefig("pca_summary.png", dpi=300, bbox_inches='tight')
-    plt.savefig("pca_summary.svg")  # editable in Inkscape
-    plt.show()
-
-
-def plot_symptom_change_correlation(df, pc, sess_label, beta, pval):
-
-    # Wes Anderson–inspired palette (green + purple)
-    wes_colors = {
-        "pc1":  "#7B9E89",   # muted green
-        "pc2":  "#A987B1",   # dusty lilac purple
-    }
-
-    if pc[:3] == 'PC1':
-        c = wes_colors['pc1']
-    elif pc[:3]:
-        c = wes_colors['pc2']
-
-    sns.regplot(
-        data=df, x=pc, y='symptom_change', scatter_kws={'s': 70},
-        line_kws={'color': 'black'}
-    )
-    plt.title(f"{(sess_label)}", fontsize=22)
-    plt.xlabel(f"Δ {pc.split('_')[0]}", fontsize=22)
-    plt.ylabel("Δ HADS", fontsize=22)
-    plt.tick_params(labelsize=18)
-    # Remove spines for clean style
-    for spine in ['top', 'right']:
-        plt.gca().spines[spine].set_visible(False)
-
-    # Annotation: β and p
-    #xlim = plt.xlim()
-    #ylim = plt.ylim()
-    #plt.text(
-    #    xlim[1]*0.8, ylim[1]*-0.5,  # top-right (adjust as needed)
-    #    f"β = {beta:.2f}\n$p$ = {pval:.3f}",
-     #   ha='right', va='bottom',
-     #   fontsize=18,
-    #    bbox=None,
-    #)
 
     plt.tight_layout()
     plt.savefig(f'{fig_dir}/PC2_deltahads.png', dpi=300, bbox_inches='tight')
