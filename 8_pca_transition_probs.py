@@ -9,17 +9,17 @@ import pandas as pd
 from pathlib import Path
 import os
 
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import statsmodels.formula.api as smf
+import statsmodels.api as sm
+from scipy.stats import zscore
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 from statsmodels.graphics.regressionplots import plot_partregress
 from matplotlib.colors import LinearSegmentedColormap
-
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-
-import statsmodels.formula.api as smf
-import statsmodels.api as sm
-from scipy.stats import zscore
+from matplotlib import gridspec
 
 # --------------------------------------------------
 # Set Paths
