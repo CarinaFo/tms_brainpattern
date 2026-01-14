@@ -1,18 +1,19 @@
 # Run PCA on HMM summary statistics and relate them to symptom changes
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
 import pandas as pd
 import numpy as np
-import statsmodels.formula.api as smf
-import statsmodels.api as sm
 from pathlib import Path
 import os
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+import statsmodels.formula.api as smf
+import statsmodels.api as sm
 from scipy.stats import zscore
 
-#plotting
 from statsmodels.graphics.regressionplots import plot_partregress
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
 # setting for nature publishing
 plt.rcParams['pdf.fonttype']=42
@@ -741,8 +742,6 @@ def plot_variance_explained(explained):
     )
 
     fig.tight_layout()
-
-
 
 
 def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['age', 'gender', 'years_with_depression', 'group']):
