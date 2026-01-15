@@ -1,13 +1,15 @@
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt 
-from matplotlib.ticker import MaxNLocator # plot integers
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 import re
 from matplotlib.backends.backend_pdf import PdfPages
 
 # load csv file from RedCap
-df = pd.read_csv(r"C:\Users\CarinaF\Downloads\P3990PatientExperien_DATA_LABELS_2025-11-19_0902.csv")
+df = pd.read_csv(r"C:\Users\CarinaF\Downloads\P3990PatientExperien_DATA_LABELS_2026-01-15_1103.csv")
+
+# ID 225 is ID 224 (Record ID 25), Olivia told me on the 15th of January
 
 # drop no response rows
 df = df[(df['Survey Timestamp'] != '[not completed]')]
