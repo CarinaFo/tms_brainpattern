@@ -10,7 +10,6 @@ Last update: 15/01/2026
 
 Important: run in osld environment on linux
 """
-
 import os
 import pickle
 import numpy as np
@@ -292,4 +291,4 @@ def init_log_rates(
 # ------------ Main -------------#
 
 stc_reorder, data, fo, n_states = get_best_state_sequence()
-cycle_duration = run_second_level_hmm(data, 5, n_states, 4)
+cycle_duration, run, best_fe = run_second_level_hmm(data, 5, n_states, 4)

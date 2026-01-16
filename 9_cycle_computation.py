@@ -49,13 +49,18 @@ nses=6
 nsubs=70
 
 def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int, 
-                        permute_states: bool, n_permutations: int = 1000):
+                        permute_states: bool, n_permutations: int, n_cores_avail: int):
     """
     Computes the best sequence of HMM states for the group, each subject, and each session (code from Mats)
 
     Args:
         cycle_allsessions: boolean, do we want to compute the cycle for all sessions concatenated
         ses_idx: integer, which session do we want to analyse
+        n_states: integer, HMM brain states
+        permute_states: bool, run permutation test, ATTENTION: adjust njobs depending on system
+        Neuroserv2: 1000 permutations, 20 cores ~ 2hrs
+        n_permutations: int, how many permutations(!!!!)
+        n_cores_avail: int, how many cores do we have available?
 
     Returns:
         numpy array with cycle strengths
@@ -81,6 +86,7 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     plt.xlabel('States')
     plt.ylabel('Fractional Occupancy')
     plt.savefig(f'{output_dir}/fo_{ses_idx}_{n_states}.png')
+    plt.savefig(f'{output_dir}/fo_{ses_idx}_{n_states}.svg')
     plt.show()
 
     # hard classify the state probabilities (state on or off, necessary for TINDA)
@@ -92,7 +98,7 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
 
         start_time = time.time()
 
-        n_jobs=20
+        n_jobs=n_cores_avail
 
         # run permutations in parallel
         null_model = Parallel(n_jobs=n_jobs, prefer='processes', verbose=10)(
@@ -164,6 +170,7 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     plt.title(f"FO Asymmetry – Significant Connections in session {ses_idx}")
     plt.tight_layout()
     plt.savefig(f"{output_dir}/fo_asymmetry_{ses_idx}_{n_states}.png")
+    plt.savefig(f"{output_dir}/fo_asymmetry_{ses_idx}_{n_states}.svg")
     plt.show()
 
     # now calculcate cycle strength (on a group basis)
@@ -183,7 +190,7 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     plot_cycle(best_sequence, fo_density,  significant, new_figure=True)
     plt.title(f'Cycle in Session {ses_idx}')
     plt.savefig(f'{output_dir}/cycle_{ses_idx}_{n_states}.png')
-
+    plt.savefig(f'{output_dir}/cycle_{ses_idx}_{n_states}.svg')
     plt.show()
 
     return cyc_strength
@@ -348,7 +355,7 @@ def permute_state_time_course(state_time_course: np.ndarray, n_states: int):
     asym = np.squeeze(np.nanmean((fo_density[:, :, 0] - fo_density[:, :, 1]), axis=2))
 
     # Cycle strength
-    cyc_strength = compute_cycle_strength(angleplot, asym, relative=False)
+    cyc_strength = compute_cycle_strength(angleplot, asym, relative=True)
 
     return cyc_strength
 
