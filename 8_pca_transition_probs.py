@@ -12,7 +12,6 @@ import os
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import statsmodels.formula.api as smf
-import statsmodels.api as sm
 from scipy.stats import zscore
 
 import matplotlib.pyplot as plt
@@ -38,18 +37,20 @@ else:
     "No available system path defined *windows* or *linux*"
 
 # where are the HMM summary stats stored
-hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
+hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_1Hzcanonical_3Hzfiltered')
 
 fig_dir = Path(f'{hmm_dir}/figures')
 
 if not fig_dir.exists():
     os.makedirs(fig_dir, exist_ok=True)
 
+output_dir = Path(f"{hmm_dir}/figures/cycles")
+
 n_states = 10 
 n_sessions=6
 
 def run_PCA_on_transition_matrix(n_sessions: int, 
-                                    n_states: int):
+                                n_states: int, cycles: bool):
     '''fit PCA on transition probability matrix obtained from HMM'''
     all_ses = []
 
@@ -62,6 +63,22 @@ def run_PCA_on_transition_matrix(n_sessions: int,
 
     # save transition probabilities to disk
     np.save(f'{hmm_dir}/transition_probs.npy', transitions)
+
+    if cycles:
+        # load FO asymetry matrix
+        asym = np.load(f'{output_dir}/fo_asymmetry_{ses}_{n_states}.npy')
+
+        # asym has shape (10, 10, 420)
+        n = asym.shape[0]
+
+        # mask to exclude diagonal
+        mask = ~np.eye(n, dtype=bool)
+
+        # reshape
+        X = np.stack([asym[:, :, i][mask] for i in range(asym.shape[2])])
+
+        # keep diagoanl
+        X_wdiagonal = asym.reshape(420, 100)  # 10*10 = 100 features
 
     # Continue with reshaping
     n_sessions = transitions.shape[0]
@@ -96,7 +113,7 @@ def run_PCA_on_transition_matrix(n_sessions: int,
 def add_PCA_to_data(n_states: int):
     '''add PCs to the clinical dataframe'''
 
-    X, transitions, X_pca, pca, loadings = run_PCA_on_transition_matrix(6, n_states=n_states)
+    X, transitions, X_pca, pca, loadings = run_PCA_on_transition_matrix(6, n_states=n_states, cycles=False)
 
     # open clinical dataframe
     csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
@@ -104,12 +121,6 @@ def add_PCA_to_data(n_states: int):
     df = pd.read_csv(csv_path)
 
     print(f"Analyzing {df['patient'].nunique()} patients")
-
-    # Define column names T00, T01, ..., T55
-    transition_cols = [f"T{i}{j}" for i in range(n_states) for j in range(n_states)]
-
-    # Create DataFrame from transitions
-    trans_df = pd.DataFrame(X, columns=transition_cols)
 
     # Assuming we know the order of patients and sessions TODO: (unsafe, recode)
     patients = pd.unique(df['patient'])
