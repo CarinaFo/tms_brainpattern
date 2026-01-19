@@ -1,23 +1,60 @@
-# Run PCA on HMM summary statistics and relate them to symptom changes
+"""Run mixed models on FO
+
+Author: Carina Forster
+
+Last update: 16/01/2026
+"""
 import pandas as pd
 import numpy as np
-import statsmodels.formula.api as smf
-import statsmodels.api as sm
 from pathlib import Path
 import os
+import pickle
 
-#plotting
+import statsmodels.formula.api as smf
+import statsmodels.api as sm
+from scipy.stats import zscore
+
+from statsmodels.graphics.regressionplots import plot_partregress
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
-# setup paths
-home_dir = Path("L:/Lab_LucaC/Carina/")
+# setting for nature publishing
+plt.rcParams['pdf.fonttype']=42
 
-hmm_dir = Path(f"{home_dir}/prepared_giles_filtered3Hz")
-fig_dir = Path(f'{hmm_dir}/figures')
+# linux doesn't have Arial
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["DejaVu Sans"],
+    "font.size": 14,
+    "axes.labelsize": 18,
+    "axes.titlesize": 18,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
+})
 
-if not fig_dir.exists():
-    os.makedirs(fig_dir, exist_ok=True)
+# run in base python (3.12)
+system='linux'
+
+if system == 'linux':
+    # set working directory
+    base_dir = Path('/home/carinaf/LabData')
+elif system == 'windows':
+    # Windows home dir
+    base_dir = Path("L:")
+else:
+    "No available system path defined *windows* or *linux*"
+
+# ------------ Directories -------------#
+# where are the HMM summary stats stored
+hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
+
+n_states=10
+sess_idx=99
+
+# where are the symptoms stored
+csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
 
 def load_and_prep_data(n_states, exclude_repeater: bool = False):
     
@@ -28,21 +65,10 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
 
     unique_ids = pd.unique(df.patient)
 
-    print(len(unique_ids))
-
-    # exclude repeater IDs and very noisy IDs
-    exclude_ids = [ "127", '159', "182", '215']
-    removed_ids = [list(unique_ids).index(i) for i in exclude_ids]
-
-    df = df[~df["patient"].isin(exclude_ids)]
     if exclude_repeater:
         repeater_ids = [i for i in unique_ids if "R" in str(i)]
         repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
         df = df[~df["patient"].str.contains("R")]
-        drop_indices = removed_ids + repeater_positions
-
-    drop_indices = removed_ids
-    np.save(f'{hmm_dir}/dropped_indices.npy', np.array(drop_indices))
 
     print(f"Analyzing {df['patient'].nunique()} patients")
 
@@ -83,7 +109,7 @@ def analyze_fo_depression(
         pandas.DataFrame with all results
     """
 
-    df = load_and_prep_data(8, False)
+    df = load_and_prep_data(10, False)
     df = df.copy()
 
     # --------------------------------------------------
