@@ -39,7 +39,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 base_dir = Path('/home/carinaf/LabData')
 
 # where are the HMM summary stats stored
-hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
+hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_1Hzcanonical_3Hzfiltered')
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 output_dir.mkdir(parents=True, exist_ok=True)
@@ -78,7 +78,6 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     if cycle_allsessions:
         # flatten the list ( we have now subject X sessions stacked vertically, e.g. patient 1 session 1, patient 1 session 2...)
         stc_filtered = [session for patient in stc for session in patient]
-
         pickle.dump({"stc": stc_filtered}, open(f'{output_dir}/stc_{ses_idx}_{n_states}.pkl', 'wb'))
 
     fo = modes.fractional_occupancies(stc_filtered)  # shape (n_states, n_features)
@@ -122,6 +121,8 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
 
     # FO asymmetry (takes fo density and calculates difference between first and second interval and subtracts mean (normalizes the data))
     asym = np.squeeze((fo_density[:, :, 0] - fo_density[:, :, 1])/np.mean(fo_density, axis=2)) # shape is n_states, n_states, n_patients*n_sessions
+    
+    np.save(f'{output_dir}/fo_asymmetry_{ses_idx}_{n_states}.npy', asym)
 
     # should we plot this instead? normalizes FO asymmetry over patients
     mean_direction = np.squeeze(np.mean((fo_density[:, :, 0] - fo_density[:, :, 1]), axis=-1))
@@ -167,7 +168,7 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
                         ha="center", va="center",
                         color="black", fontsize=14, fontweight="bold")
 
-    plt.title(f"FO Asymmetry – Significant Connections in session {ses_idx}")
+    #plt.title(f"FO Asymmetry – Significant Connections in session {ses_idx}")
     plt.tight_layout()
     plt.savefig(f"{output_dir}/fo_asymmetry_{ses_idx}_{n_states}.png")
     plt.savefig(f"{output_dir}/fo_asymmetry_{ses_idx}_{n_states}.svg")
@@ -219,7 +220,7 @@ def test_sign_cycle(test_group: bool = True, null_model: list = None,
     plt.hist(group_null)
     plt.vlines(group_observed, 0, 250, color='red', label='observed')
     plt.legend()
-    plt.savefig(f'{output_dir}/permutating the state time course 1000 times per subject for {n_states}')
+    plt.savefig(f'{output_dir}/permutations_cycle_strength_{n_states}')
     plt.show()
 
     return p_value
