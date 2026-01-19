@@ -4,6 +4,21 @@ from matplotlib import gridspec
 import matplotlib.image as mpimg
 from pathlib import Path
 
+# setting for nature publishing
+plt.rcParams['pdf.fonttype']=42
+
+# linux doesn't have Arial
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["DejaVu Sans"],
+    "font.size": 14,
+    "axes.labelsize": 18,
+    "axes.titlesize": 18,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
+})
+
 system='linux'
 
 if system == 'linux':
@@ -15,7 +30,7 @@ elif system == 'windows':
 else:
     "No available system path defined *windows* or *linux*"
 
-save_dir = Path(f'{base_dir}/hmm_fits_1Hzcanonical_3Hzfiltered')
+save_dir = Path(f'{base_dir}/hmm_fits_05Hzcanonical_1Hzfiltered')
 
 state=10
 ses=0
