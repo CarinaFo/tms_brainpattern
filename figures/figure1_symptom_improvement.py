@@ -14,15 +14,16 @@ import statsmodels.formula.api as smf
 # setting for nature publishing
 plt.rcParams['pdf.fonttype']=42
 
-
+# linux doesn't have Arial
 plt.rcParams.update({
-    "font.family": "Arial",  # Nature preference
-    "font.size": 14,
-    "axes.labelsize": 18,
-    "axes.titlesize": 18,
-    "xtick.labelsize": 14,
-    "ytick.labelsize": 14,
-    "legend.fontsize": 14,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["DejaVu Sans"],
+    "font.size": 12,
+    "axes.labelsize": 14,
+    "axes.titlesize": 14,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 13,
+    "legend.fontsize": 12,
 })
 
 # --------------------------------------------------
@@ -109,7 +110,7 @@ def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
     df_mid["session_num"] = df_mid["session"].map(session_map)
 
     lmm_linear = smf.mixedlm(
-        "hads_dep_total ~ session_num",
+        f"{outcome_variable} ~ session_num",
         data=df_mid,
         groups=df_mid["patient"]
         ).fit(reml=False)
@@ -117,7 +118,7 @@ def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
     print(lmm_linear.summary())
 
     lmm_quad = smf.mixedlm(
-        "hads_dep_total ~ session_num + I(session_num**2)",
+        f"{outcome_variable} ~ session_num + I(session_num**2)",
         data=df_mid,
         groups=df_mid["patient"]
     ).fit(reml=False)
@@ -221,7 +222,6 @@ def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
 
     # Plot style
     sns.set_theme(style="whitegrid")
-    plt.rcParams['font.family'] = 'Arial'
 
     plt.figure(figsize=(7.1, 6))
 
