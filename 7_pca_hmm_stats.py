@@ -18,14 +18,16 @@ from matplotlib import gridspec
 # setting for nature publishing
 plt.rcParams['pdf.fonttype']=42
 
+# linux doesn't have Arial
 plt.rcParams.update({
-    "font.family": "Arial",  # Nature preference
-    "font.size": 14,
-    "axes.labelsize": 18,
-    "axes.titlesize": 18,
-    "xtick.labelsize": 14,
-    "ytick.labelsize": 14,
-    "legend.fontsize": 14,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["DejaVu Sans"],
+    "font.size": 12,
+    "axes.labelsize": 14,
+    "axes.titlesize": 14,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 13,
+    "legend.fontsize": 12,
 })
 
 # run in base python (3.12)
@@ -34,7 +36,7 @@ system='windows'
 if system == 'linux':
     # set working directory
     base_dir = Path('/home/carinaf/LabData')
-elif system == 'windows':
+elif system == 'windows':I 
     # Windows home dir
     base_dir = Path("L:")
 else:
@@ -296,7 +298,7 @@ def plot_pc_vs_symptom_change(n_states: int,
     model = smf.ols("symptom_change ~ PC2_change + age + gender + years_with_depression + group", data=df_sess2).fit()
     print(model.summary())
 
-    plot_symptom_change_correlation(df_clean, covariates)
+    plot_symptom_change_correlation(df_clean, covariates, n_states)
 
     # PC2 change and symptom change do not sign. correlate between session 1 and 2
 
@@ -304,11 +306,11 @@ def plot_pc_vs_symptom_change(n_states: int,
 
 
 ### plotting functions
-def plot_symptom_change_correlation(df, covariates):
+def plot_symptom_change_correlation(df, covariates, n_states):
 
     fig, (ax1, ax2) = plt.subplots(
         1, 2,
-        figsize=(7.1, 6),
+        figsize=(7.1, 4),
         sharey=True,
         gridspec_kw={"wspace": 0.4}
     )
@@ -359,7 +361,7 @@ def plot_symptom_change_correlation(df, covariates):
             ax.spines[spine].set_visible(False)
 
     plt.tight_layout()
-    plt.savefig(f'{fig_dir}/symptom_change_PC2FO.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{fig_dir}/symptom_change_PC2FO_{n_states}.png', dpi=300, bbox_inches='tight')
     plt.show()
 
     return 
@@ -515,8 +517,7 @@ def plot_responder_group(df):
 
     ax = counts.plot(
         kind='bar',
-        color=colors,
-        title='N = 76'
+        color=colors
     )
 
     ax.set_xlabel('TMS Outcome')
@@ -687,34 +688,37 @@ def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['ag
     # ---- Panel A: PC1 loadings ----
     loadings = pd.DataFrame(pca.components_.T, columns=[f"PC{i+1}" for i in range(pca.n_components_)], index=feature_cols)
     loadings['feature_names'] = feature_names
-    pc1_sorted = loadings[['feature_names','PC1']].sort_values('PC1')
+    pc1_sorted = loadings[['feature_names','PC1']]
     fnames_pc1 = [f[3:] for f in pc1_sorted.feature_names]
     colors_pc1 = [neg_color if x<0 else pos_color for x in pc1_sorted.PC1]
 
     ax1 = fig.add_subplot(gs[0,0])
     ax1.bar(fnames_pc1, pc1_sorted.PC1, color=colors_pc1)
     ax1.axhline(0, color='black', linestyle='--')
-    ax1.set_xticklabels(fnames_pc1, rotation=45, ha='right')
+    ax1.set_xticklabels(fnames_pc1, rotation=0, ha='right')
+    ax1.set_ylim(-0.6, 0.6)  # slightly beyond the min/max to give padding
+    ax1.set_yticks([-0.5, 0, 0.5])
+    ax1.set_yticklabels([-0.5, 0, 0.5])
+    ax1.set_xlabel('HMM states')
     ax1.set_ylabel("PC1 Loadings")
-    ax1.text(-0.15, 1.1, "A", transform=ax1.transAxes, fontsize=18, fontweight="bold", va="top")
+    ax1.text(-0.15, 1.1, "A", transform=ax1.transAxes, fontsize=20, fontweight="bold", va="top")
 
     # ---- Panel B: PC2 loadings ----
-    pc2_sorted = loadings[['feature_names','PC2']].sort_values('PC2')
+    pc2_sorted = loadings[['feature_names','PC2']]
     fnames_pc2 = [f[3:] for f in pc2_sorted.feature_names]
     colors_pc2 = [neg_color if x<0 else pos_color for x in pc2_sorted.PC2]
 
     ax2 = fig.add_subplot(gs[0,1])
     ax2.bar(fnames_pc2, pc2_sorted.PC2, color=colors_pc2)
     ax2.axhline(0, color='black', linestyle='--')
-    ax2.set_xticklabels(fnames_pc2, rotation=45, ha='right')
+    ax2.set_xticklabels(fnames_pc2, rotation=0, ha='right')
+    ax2.set_ylim(-0.6, 0.6)
+    ax2.set_yticks([-0.5, 0, 0.5])
+    ax2.set_yticklabels([-0.5, 0, 0.5])
+    ax2.set_xlabel('HMM states')
     ax2.set_ylabel("PC2 Loadings")
-    ax2.text(-0.15, 1.1, "B", transform=ax2.transAxes, fontsize=18, fontweight="bold", va="top")
+    ax2.text(-0.15, 1.1, "B", transform=ax2.transAxes, fontsize=20, fontweight="bold", va="top")
 
-    # Make PC loadings y-axis identical
-    min_y = min(pc1_sorted.PC1.min(), pc2_sorted.PC2.min())
-    max_y = max(pc1_sorted.PC1.max(), pc2_sorted.PC2.max())
-    ax1.set_ylim(min_y, max_y)
-    ax2.set_ylim(min_y, max_y)
     # ---- Panel D: Partial regression PC1 ~ HADS ----
     ax3 = fig.add_subplot(gs[1, 0])
     plot_partregress('PC1', 'hads_dep_total', covariates, data=df, obs_labels=False, ax=ax3)
