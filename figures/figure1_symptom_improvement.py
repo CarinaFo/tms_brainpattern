@@ -55,6 +55,7 @@ def lighten_color(color, amount=0.6):
     )
 
 light_color = lighten_color(base_color, amount=0.6)
+
 # --------------------------------------------------
 # Data loading & preprocessing
 # --------------------------------------------------
@@ -68,9 +69,6 @@ def load_and_prep_data(csv_path, exclude_repeater: bool = False):
     if exclude_repeater:
         df = df[~df["patient"].str.contains("R", na=False)]
     
-    # 159 is missing post HADS
-    df = df[~df["patient"].str.contains("159", na=False)]
-        
     # load patient ID list
     patient_ids = pd.read_csv(Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/prepared_data_giles_1Hz_3Hzfiltereddata/patients_fitted_for_this_hmm.csv"))
 
@@ -87,7 +85,7 @@ def load_and_prep_data(csv_path, exclude_repeater: bool = False):
     return df
 
 
-def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
+def plot_symptom_change_hads(all_weeks: bool = False, outcome_variable: str = 'hads_dep_total'):
 
     df = load_and_prep_data(csv_path)
 
@@ -275,10 +273,10 @@ def plot_symptom_change_hads(all_weeks: bool, outcome_variable: str):
     plt.savefig(f"{fig_dir}/raincloud_dep_hads_trajectories.png", dpi=300, bbox_inches="tight")
     plt.show()
 
-    descriptives()
+    descriptives(var_per_session, outcome_variable, df)
 
 
-def descriptives(df: pd.DataFrame, outcome_variable: str, var_per_session: pd.DataFrame):
+def descriptives(var_per_session, outcome_variable, df):
 
     wide = var_per_session.pivot(
     index="patient",
@@ -310,13 +308,29 @@ def descriptives(df: pd.DataFrame, outcome_variable: str, var_per_session: pd.Da
     print(f"{n_responders} / {n_total} patients improved ≥50% from baseline to post")
 
     df.groupby('patient')['gender'].first().value_counts()
-    df.groupby('patient')['age'].first().mean()
+    df.groupby('patient')['age'].first().median()
     df.groupby('patient')['age'].first().min()
     df.groupby('patient')['age'].first().max()
 
     df.groupby('patient')['years_with_depression'].first().mean()
     df.groupby('patient')['years_with_depression'].first().min()
     df.groupby('patient')['years_with_depression'].first().max()
+
+    df.groupby('patient')['years_with_depression'].first().mean()
+    df.groupby('patient')['years_with_depression'].first().min()
+    df.groupby('patient')['years_with_depression'].first().max()
+
+    def extract_leading_number(s):
+        return (
+        s.astype(str)
+         .str.extract(r'(\d+)', expand=False)
+         .astype(float)
+    )
+
+    df['treatment_days_num'] = extract_leading_number(df['number of treatment days'])
+
+    df.groupby('patient')['treatment_days_num'].first().mean()
+    df.groupby('patient')['treatment_days_num'].first().min()
 
     baseline_vars = (
     df[df["session"] == "pre"]
@@ -329,7 +343,7 @@ def descriptives(df: pd.DataFrame, outcome_variable: str, var_per_session: pd.Da
             "previous ect",
             "previous tms",
             "research tier",
-            'number of treatment days'
+            'treatment_days_num'
         ]
     ]
     .rename(
@@ -337,16 +351,13 @@ def descriptives(df: pd.DataFrame, outcome_variable: str, var_per_session: pd.Da
             "age of symptom onset": "age_onset",
             "previous ect": "previous_ect",
             "previous tms": "previous_tms",
-            "research tier": "research_tier",
-            "number of treatment days": 'number_of_treatment_days'
+            "research tier": "research_tier"
             }
         )
     )
     
     # clean up treatment days
-    baseline_vars["number_of_treatment_days"] = (baseline_vars["number_of_treatment_days"].astype(str).str.extract(r'(\d+)')).astype('int')
-    
-    baseline_vars.groupby('patient')['number_of_treatment_days'].first().mean()
+    baseline_vars.groupby('patient')['treatment_days_num'].first().mean()
 
     model_df = wide.join(baseline_vars, how="inner")
 
@@ -354,7 +365,7 @@ def descriptives(df: pd.DataFrame, outcome_variable: str, var_per_session: pd.Da
     "gender",
     "previous_ect",
     "previous_tms",
-    #"research_tier",
+    "research_tier",
     ]
 
     for col in categorical_vars:
@@ -364,11 +375,11 @@ def descriptives(df: pd.DataFrame, outcome_variable: str, var_per_session: pd.Da
     from sklearn.preprocessing import StandardScaler
 
     scaler = StandardScaler()
-    continuous_vars = ["age", "age_onset", "number_of_treatment_days", "pre"]
+    continuous_vars = ["age", "age_onset", "treatment_days_num", "pre"]
 
     model_df[continuous_vars] = scaler.fit_transform(model_df[continuous_vars])
 
-    base_model = smf.ols('post ~  pre + age + gender + age_onset + previous_ect + previous_tms + research_tier + number_of_treatment_days'
+    base_model = smf.ols('post ~  pre + age + gender + age_onset + previous_ect + previous_tms + research_tier + treatment_days_num'
                     , data=model_df).fit()
     
     print(base_model.summary())
@@ -393,7 +404,7 @@ def descriptives(df: pd.DataFrame, outcome_variable: str, var_per_session: pd.Da
         "research_tier[T.RCT acceptable]": "Neurological vs RCT",
         "pre": "Baseline hads score",
         "age_onset": "Depression onset",
-        "number_of_treatment_days": "Treatment days",
+        "treatment_days_num": "Treatment days",
         "previous_ect[T.Yes]": "Previous ECT",
         "previous_tms[T.Yes]": "Previous TMS",
     }
