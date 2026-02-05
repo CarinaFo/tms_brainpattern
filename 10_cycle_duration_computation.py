@@ -44,7 +44,7 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 output_dir.mkdir(parents=True, exist_ok=True)
 
-n_states=10
+n_states=12
 nses=6
 
 csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
@@ -94,7 +94,7 @@ def run_second_level_hmm(
     ses: int = 99
 ):
     for i_run in range(n_runs):
-        rundir = f"{hmm_dir}/run{i_run+1}"
+        rundir = f"{hmm_dir}/figures/cycles/cycle_rate_{n_states}/run{i_run+1}"
         os.makedirs(rundir, exist_ok=True)
 
         # Because we reordered the states according to (individualised) bestseq
@@ -291,4 +291,4 @@ def init_log_rates(
 # ------------ Main -------------#
 
 stc_reorder, data, fo, n_states = get_best_state_sequence()
-cycle_duration, run, best_fe = run_second_level_hmm(data, 5, n_states, 4)
+cycle_duration, run, best_fe = run_second_level_hmm(data, 1, n_states, n_states)
