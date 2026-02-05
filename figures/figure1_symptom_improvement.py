@@ -444,3 +444,120 @@ def descriptives(var_per_session, outcome_variable, df):
     plt.savefig(Path(f'{fig_dir}/coefplot_hads_predictors.png'), dpi=300, bbox_inches='tight')
     plt.savefig(Path(f'{fig_dir}/coefplot_hads_predictors.svg'), dpi=300, bbox_inches='tight')
     plt.show()
+
+
+def plot_change_correlations_quadrants(
+    df: pd.DataFrame,
+    patient_col: str = "patient",
+    session_col: str = "session",
+    scales: list[str] = ['hads_dep_total', 'hads_anx_total', 'hama_total', 'madrs_total'],
+    session_a: int = 'pre',
+    session_b: int = 'post',
+    method: str = "spearman",
+    dropna_rows: bool = True,
+    figsize_per_cell: float = 3.2,
+):
+    """
+    Compute within-patient change (session_b - session_a) for each scale, then
+    plot pairwise scatter plots with 4 quadrants and display Spearman rho.
+
+    Returns:
+        diff (pd.DataFrame): patient-level change scores (index = patient)
+        corr (pd.DataFrame): correlation matrix across change scores
+    """
+    if scales is None:
+        raise ValueError("Please provide a list of scale column names in `scales`.")
+
+    # --- compute change scores (wide -> subtract) ---
+    wide = df.pivot_table(index=patient_col, columns=session_col, values=scales, aggfunc="mean")
+
+    # Ensure required sessions exist as columns; if not, you'll get KeyError
+    try:
+        a = wide.xs(session_a, level=session_col, axis=1)
+        b = wide.xs(session_b, level=session_col, axis=1)
+    except KeyError as e:
+        raise KeyError(
+            f"Could not find sessions {session_a} and/or {session_b} in '{session_col}'. "
+            f"Available sessions: {sorted(df[session_col].dropna().unique())}"
+        ) from e
+
+    # pre minus post to measure improvement
+    diff = (a-b).copy()
+    diff.columns = [f"{c}_diff_s{session_a}_s{session_b}" for c in diff.columns]
+
+    if dropna_rows:
+        diff = diff.dropna(how="any")
+
+    # --- correlation matrix ---
+    corr = diff.corr(method=method)
+
+    # --- plot pairwise grid (lower triangle) ---
+    n = len(scales)
+    fig, axes = plt.subplots(n, n, figsize=(figsize_per_cell * n, figsize_per_cell * n))
+
+    # Helper to map original scale -> diff column
+    diff_col = {s: f"{s}_diff_s{session_a}_s{session_b}" for s in scales}
+
+    for i, y_scale in enumerate(scales):
+        for j, x_scale in enumerate(scales):
+            ax = axes[i, j]
+
+            if i == j:
+                # Diagonal: show label + N
+                ax.axis("off")
+                ax.text(
+                    0.5, 0.6, y_scale,
+                    ha="center", va="center", fontweight="bold",
+                    transform=ax.transAxes
+                )
+                ax.text(
+                    0.5, 0.4, f"N={len(diff)}",
+                    ha="center", va="center", 
+                    transform=ax.transAxes
+                )
+                continue
+
+            x = diff[diff_col[x_scale]]
+            y = diff[diff_col[y_scale]]
+
+            # Hide upper triangle to reduce clutter
+            if j > i:
+                ax.axis("off")
+                continue
+
+            # Scatter
+            ax.scatter(x, y)
+
+            # Quadrant lines
+            ax.axhline(0)
+            ax.axvline(0)
+
+            # Spearman rho (pairwise complete)
+            mask = x.notna() & y.notna()
+            if mask.sum() >= 3:
+                rho = x[mask].corr(y[mask], method=method)
+                ax.text(
+                    0.05, 0.95, f"{method.title()} ρ={rho:.2f}",
+                    ha="left", va="top", transform=ax.transAxes
+                )
+            else:
+                ax.text(
+                    0.05, 0.95, "Too few pairs",
+                    ha="left", va="top", transform=ax.transAxes
+                )
+
+            # Labels on left column / bottom row only
+            if j == 0:
+                ax.set_ylabel(f"{y_scale}\nΔ(S{session_a}-S{session_b})")
+            else:
+                ax.set_yticklabels([])
+
+            if i == n - 1:
+                ax.set_xlabel(f"{x_scale}\nΔ(S{session_a}-S{session_b})")
+            else:
+                ax.set_xticklabels([])
+
+    fig.tight_layout()
+    plt.show()
+
+    return diff, corr
