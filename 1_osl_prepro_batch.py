@@ -30,9 +30,13 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-workstation = 'neuroserv'
 
-home_dir = '/home/carinaf/LabData/Lab_LucaC/Carina/canonical_hmm_finalsample'
+workstation = 'desktop'
+
+if workstation == 'desktop':
+    home_dir = 'L:/Lab_LucaC/Carina/canonical_hmm_finalsample'
+elif workstation == 'lucky3':
+    home_dir = 'home/carinaf/LabData/Lab_LucaC/Carina/canonical_hmm_finalsample'
 
 # create output directory
 outdir = f'{home_dir}/preprocessed'
@@ -208,7 +212,9 @@ def extract_patient_ids(src_dir: Path = Path("/home/carinaf/tms_mdd/preprocessed
     return patient_ids
 
 
-def crop_data_for_hmm(fs: int = 250):
+def crop_data_for_hmm():
+
+    #rename_raw_files()
 
     import re
 
