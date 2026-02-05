@@ -57,7 +57,7 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
-n_states=10
+n_states=8
 sess_idx=99
 
 # where are the symptoms stored
@@ -76,7 +76,7 @@ def which_run(nruns: int = 5):
 
 def load_cycle_parameters():
 
-    with open(f"{hmm_dir}/run1/cycle_duration_{sess_idx}_{n_states}.pkl", "rb") as f:
+    with open(f"{hmm_dir}/figures/cycles/cycle_rate_{n_states}/run1/cycle_duration_{sess_idx}_{n_states}.pkl", "rb") as f:
         cycle_duration = pickle.load(f)
 
     # load tinda
@@ -127,7 +127,7 @@ def add_cycle_parameters_to_df():
     df_state1['cycle_duration'] = cycle_mean
     df_state1['cycle_rate'] = df_state1['cycle_duration'].apply(lambda x: 1/x)
     
-    df_state1.to_csv(f'{hmm_dir}/df_includingcycles.csv')
+    df_state1.to_csv(f'{hmm_dir}/df_includingcycles_{n_states}.csv')
 
     return df_state1
 
@@ -136,7 +136,7 @@ def add_cycle_parameters_to_df():
 def load_and_prep_data(n_states, exclude_repeater: bool = False):
     
     # read df including cycle params
-    csv_path = Path(f'{hmm_dir}/df_includingcycles.csv')
+    csv_path = Path(f'{hmm_dir}/df_includingcycles_{n_states}.csv')
 
     # read csv file containing clinical and hmm data
     df = pd.read_csv(csv_path)
@@ -223,7 +223,7 @@ def analyse_cycle_params(df):
     print(model.summary())
 
     # plot figure 2
-    plot_cycle_params_baseline_hads(df_sess1_pre, 99, 10)
+    plot_cycle_params_baseline_hads(df_sess1_pre, 99, n_states)
     
     return df_removeoutlier
 
