@@ -1,5 +1,7 @@
 # Plot figure 1 (symptom improvement in HADS score over 3 sessions)
 # run descriptives and stats on baseline predictors for results
+# run in python 3.12 environment
+
 import os
 from pathlib import Path
 import pandas as pd
@@ -59,7 +61,7 @@ light_color = lighten_color(base_color, amount=0.6)
 # --------------------------------------------------
 # Data loading & preprocessing
 # --------------------------------------------------
-def load_and_prep_data(csv_path, exclude_repeater: bool = False):
+def load_and_prep_data(exclude_repeater: bool = False):
 
     df = pd.read_csv(csv_path)
 
@@ -87,7 +89,7 @@ def load_and_prep_data(csv_path, exclude_repeater: bool = False):
 
 def plot_symptom_change_hads(all_weeks: bool = False, outcome_variable: str = 'hads_dep_total'):
 
-    df = load_and_prep_data(csv_path)
+    df = load_and_prep_data()
 
     session_order = [
     "pre",
