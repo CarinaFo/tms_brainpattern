@@ -36,7 +36,7 @@ system='windows'
 if system == 'linux':
     # set working directory
     base_dir = Path('/home/carinaf/LabData')
-elif system == 'windows':I 
+elif system == 'windows':
     # Windows home dir
     base_dir = Path("L:")
 else:
@@ -155,13 +155,13 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
     return df
 
 
-def run_PCA(n_states):
+def run_PCA(n_states: int, clr: bool = False):
 
     df = load_and_prep_data(n_states, False)
 
     df = df[df['group'].isin([1,2,3])]
 
-    metrics = ['fo'] # 'lt', 'sr', 'intv']
+    metrics = ['fo']
 
     # Pivot: one row per patient/session/tms, columns = state × metric
     df_wide = df.pivot_table(
@@ -175,12 +175,21 @@ def run_PCA(n_states):
     df_wide = df_wide.reset_index()
 
     # Select only HMM feature columns, drop one state for fractional occupancy (sum to 1, creates issues for PCA)
-    feature_cols = [c for c in df_wide.columns if c.startswith(('fo_', 'lt_', 'sr', 'intv')) and not c.startswith(f'fo_state{n_states}')]
+    feature_cols = [c for c in df_wide.columns if c.startswith(('fo_', 'lt_', 'sr', 'intv'))]
 
-    X = df_wide[feature_cols].dropna()  # remove NaNs
+    if clr:
+        feature_cols = [c for c in df_wide.columns if c.startswith(('fo_', 'lt_', 'sr', 'intv'))]
+
+        X = df_wide[feature_cols]
+
+        # centered log ratio
+        X = clr(X)
+
+    # select columns
+    X = df_wide[feature_cols]
 
     # Standardize features before PCA
-    X_scaled = StandardScaler().fit_transform(X) # should be shape n_patients * sessions, n_states*4-1
+    X_scaled = StandardScaler().fit_transform(X) # should be shape n_patients * sessions, n_states
 
     # Fit PCA
     pca = PCA(n_components=None)  # keep all components initially
@@ -204,7 +213,7 @@ def run_PCA(n_states):
     keys = ['patient', 'session', 'tms']
 
     df_merged = df.merge(
-        df_pca[['patient', 'session', 'tms', 'PC1', 'PC2', 'PC3']],
+        df_pca[['patient', 'session', 'tms', 'PC1', 'PC2']],
         on=keys,
         how='left'
     )
@@ -216,7 +225,8 @@ def run_PCA(n_states):
     # zscore and remove outlier
     df_removeoutlier = df_clean[
     (np.abs(zscore(df_clean['PC2'], nan_policy='omit')) < 3) &
-    (np.abs(zscore(df_clean['hads_dep_total'], nan_policy='omit')) < 3)
+    (np.abs(zscore(df_clean['hads_dep_total'], nan_policy='omit')) < 3) &
+    (np.abs(zscore(df_clean['PC1'], nan_policy='omit')) < 3)
     ]
 
     # does PC predict hads score in session 1
@@ -752,3 +762,10 @@ def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['ag
         for spine in ['top','right']:
             ax.spines[spine].set_visible(False)
     return fig
+
+
+def clr(X, eps=1e-10):
+    X = np.asarray(X, dtype=float)          # <-- converts DataFrame to numpy
+    X = np.clip(X, eps, None)               # avoid log(0)
+    gm = np.exp(np.mean(np.log(X), axis=1, keepdims=True))
+    return np.log(X / gm)
