@@ -27,7 +27,7 @@ plt.rcParams['pdf.fonttype']=42
 
 # linux doesn't have Arial
 plt.rcParams.update({
-    "font.family": "sans-serif",
+    "font.family": "Arial",
     "font.sans-serif": ["DejaVu Sans"],
     "font.size": 12,
     "axes.labelsize": 14,
@@ -38,7 +38,7 @@ plt.rcParams.update({
 })
 
 # run in base python (3.12)
-system='linux'
+system='windows'
 
 if system == 'linux':
     # set working directory
@@ -55,7 +55,7 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
-n_states=6
+n_states=10
 sess_idx=99
 
 # where are the symptoms stored
@@ -328,7 +328,7 @@ def plot_symptom_change_correlation(df, covariates):
     ax1.set_xlabel("Δ HADS-D")
     ax1.set_ylabel("Δ Cycle rate change")
     ax1.text(
-        -0.15, 1.1, "A",
+        -0.15, 1.1, "a",
         transform=ax1.transAxes,
         fontsize=20,
         fontweight="bold",
@@ -348,7 +348,7 @@ def plot_symptom_change_correlation(df, covariates):
     ax2.set_xlabel("Δ HADS-D")
     ax2.set_ylabel("")  # avoid duplicate label
     ax2.text(
-        -0.15, 1.1, "B",
+        -0.15, 1.1, "b",
         transform=ax2.transAxes,
         fontsize=20,
         fontweight="bold",
@@ -422,7 +422,7 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'g
                 fontweight="bold"
             )
 
-    ax1.text(-0.15, 1.5, "A", transform=ax1.transAxes,
+    ax1.text(-0.15, 1.5, "a", transform=ax1.transAxes,
          fontsize=20, fontweight="bold", va="top")
 
     # Move x-axis ticks and label to the top
@@ -485,7 +485,7 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'g
         new_figure=False
     )
 
-    ax2.text(-0.15, 1.5, "B", transform=ax2.transAxes,
+    ax2.text(-0.15, 1.5, "b", transform=ax2.transAxes,
         fontsize=20, fontweight="bold", va="top")
 
     # ---- Panel C: Partial regression Cycle strength ~ HADS ----
@@ -494,7 +494,7 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'g
     ax3.set_xlabel("baseline HADS-D")
     ax3.set_ylabel("baseline cycle strength")
     ax3.text(
-        -0.15, 1.15, "C",
+        -0.15, 1.15, "c",
         transform=ax3.transAxes,
         fontsize=20,
         fontweight="bold",
@@ -509,7 +509,7 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'g
     ax4.set_xlabel("baseline HADS-D")
     ax4.set_ylabel("baseline cycle rate")
     ax4.text(
-        -0.15, 1.15, "D",
+        -0.15, 1.15, "d",
         transform=ax4.transAxes,
         fontsize=20,
         fontweight="bold",
