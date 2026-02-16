@@ -7,7 +7,6 @@ import os
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import statsmodels.formula.api as smf
-import statsmodels.api as sm
 from scipy.stats import zscore
 
 from statsmodels.graphics.regressionplots import plot_partregress
@@ -270,9 +269,16 @@ def plot_pc_vs_symptom_change(n_states: int,
 
     # --- Symptom change across sessions ---
     sym_wide = df.pivot_table(index='patient', columns='session', values=symptom_col).reset_index()
+    
+    # change scores
     sym_wide['sym_change_s1_s2'] = sym_wide[1] - sym_wide[2]
     sym_wide['sym_change_s2_s3'] = sym_wide[2] - sym_wide[3]
-    
+
+    # baseline at start of each interval
+    sym_wide['baseline_s1_s2'] = sym_wide[1]
+    sym_wide['baseline_s2_s3'] = sym_wide[2]
+
+    # reshape
     sym_change = sym_wide.melt(
         id_vars='patient',
         value_vars=['sym_change_s1_s2', 'sym_change_s2_s3'],
@@ -280,13 +286,23 @@ def plot_pc_vs_symptom_change(n_states: int,
         value_name='symptom_change'
     )
 
-    sym_change['session'] = sym_change['session_change'].str.extract(r's(\d)_s\d').astype(int)
+    baseline_long = sym_wide.melt(
+        id_vars='patient',
+        value_vars=['baseline_s1_s2', 'baseline_s2_s3'],
+        var_name='baseline_type',
+        value_name='baseline_symptom'
+    )
 
-    # --- Merge ---
+    # align session numbers
+    sym_change['session'] = sym_change['session_change'].str.extract(r's(\d)_s\d').astype(int)
+    baseline_long['session'] = baseline_long['baseline_type'].str.extract(r's(\d)_s\d').astype(int)
+
+    # merge dataframes
     df_merge = (
         pc2_change
         .merge(sym_change[['patient', 'session', 'symptom_change']], on=['patient', 'session'])
-    )
+        .merge(baseline_long[['patient', 'session', 'baseline_symptom']], on=['patient', 'session'])
+        )
 
     df_cov = df[['patient'] + covariates].drop_duplicates()
     df_merge = df_merge.merge(df_cov, on='patient', how='left').dropna()
@@ -300,12 +316,12 @@ def plot_pc_vs_symptom_change(n_states: int,
     # --- Regression & plotting ---
     # Baseline to mid of treatment
     df_sess1 = df_clean[df_clean['session'] == 1]
-    model = smf.ols("symptom_change ~ PC2_change + age + gender + years_with_depression + group", data=df_sess1).fit()
+    model = smf.ols("symptom_change ~ PC2_change + baseline_symptom + age + gender + years_with_depression + group", data=df_sess1).fit()
     print(model.summary())
 
     # Mid to end of treatment
     df_sess2 = df_clean[df_clean['session'] == 2]
-    model = smf.ols("symptom_change ~ PC2_change + age + gender + years_with_depression + group", data=df_sess2).fit()
+    model = smf.ols("symptom_change ~ PC2_change + baseline_symptom + age + gender + years_with_depression + group", data=df_sess2).fit()
     print(model.summary())
 
     plot_symptom_change_correlation(df_clean, covariates, n_states)
