@@ -1,0 +1,26 @@
+Demographic measure,Total
+N,70
+"Age, years — Median (IQR)",38.5 (29.0–50.0)
+Gender,
+  Female,40 (57.1%)
+  Male,30 (42.9%)
+Handedness,
+  Right,64 (91.4%)
+  Left,6 (8.6%)
+Years of education — Median (IQR),14.5 (12.0–17.8)
+"Age of diagnosis, years — Median (IQR)",21.0 (17.0–34.8)
+"Age of symptom onset, years — Median (IQR)",18.5 (16.0–34.0)
+Diagnostic type,
+  2.0,45 (64.3%)
+  1.0,15 (21.4%)
+  4.0,7 (10.0%)
+  3.0,3 (4.3%)
+Previous rTMS,
+  Yes,11 (15.7%)
+  No,59 (84.3%)
+Previous ECT,
+  Yes,8 (11.4%)
+  No,62 (88.6%)
+"rTMS sessions, n — Median (IQR)",26.0 (20.0–30.0)
+"rTMS sessions, n — Median (IQR)",26.0 (20.0–30.0) [17–30]
+Days from pre- to post-time point — Median (IQR) [min–max],63.0 (53.0–70.0) [37–129]
