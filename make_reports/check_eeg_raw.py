@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 
 # run in MNE environment
 
-patient_id = 'D_223'
+patient_id = 'D_226A4'
 home_dir = "L:\Lab_LucaC"
-folder_path = f"{home_dir}\A_QNC_ANT_Data\TMS_MDD_EEG_data\{patient_id}"
+folder_path = f"{home_dir}\A_QNC_ANT_Data\TMS_MDD_EEG_acceleratedprotocol_data\{patient_id}"
 
 vhdr_files = sorted([f for f in os.listdir(folder_path) if f.endswith('.vhdr')])
 print(f"Found {len(vhdr_files)} files:")
@@ -25,9 +25,18 @@ for f in vhdr_files:
 print("All files loaded!")
 
 for raw in raw_list:
-    raw.filter(1,40).plot(block=True, n_channels=64)
 
-    raw.filter(1,40).compute_psd(fmax=45, exclude='bads').plot()
+    raw_notched = raw.copy().notch_filter(freqs=[50, 100], picks="eeg")
+
+    raw_notched.plot(block=True, n_channels=64)
+
+    raw_notched.compute_psd(fmin=1, fmax=60).plot()
+
+    plt.show()
+
+    raw.copy().filter(1,40).plot(block=True, n_channels=64)
+
+    raw.copy().filter(1,40).compute_psd(fmax=45, exclude='bads').plot()
 
     plt.show()
 
