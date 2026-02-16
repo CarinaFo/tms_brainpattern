@@ -19,7 +19,7 @@ plt.rcParams['pdf.fonttype']=42
 
 # linux doesn't have Arial
 plt.rcParams.update({
-    "font.family": "sans-serif",
+    "font.family": "Arial",
     "font.sans-serif": ["DejaVu Sans"],
     "font.size": 12,
     "axes.labelsize": 14,
@@ -353,13 +353,13 @@ def plot_symptom_change_correlation(df, covariates, n_states):
     ax1.set_xlabel("Δ HADS-D")
     ax1.set_ylabel("Δ PC2")
     ax1.text(
-        -0.15, 1.1, "A",
+        -0.15, 1.1, "a",
         transform=ax1.transAxes,
         fontsize=20,
         fontweight="bold",
         va="top"
     )
-    ax1.set_title("")
+    ax1.set_title("Baseline -> Mid-Treatment", fontsize=13)
 
     # -------- Session 2 --------
     df_sess2 = df[df['session'] == 2]
@@ -373,13 +373,13 @@ def plot_symptom_change_correlation(df, covariates, n_states):
     ax2.set_xlabel("Δ HADS-D")
     ax2.set_ylabel("")  # avoid duplicate label
     ax2.text(
-        -0.15, 1.1, "B",
+        -0.15, 1.1, "b",
         transform=ax2.transAxes,
         fontsize=20,
         fontweight="bold",
         va="top"
     )
-    ax2.set_title("")
+    ax2.set_title("Mid -> Post-Treatment", fontsize=13)
 
     # -------- Styling --------
     for ax in (ax1, ax2):
@@ -727,7 +727,7 @@ def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['ag
     ax1.set_yticklabels([-0.5, 0, 0.5])
     ax1.set_xlabel('HMM states')
     ax1.set_ylabel("PC1 Loadings")
-    ax1.text(-0.15, 1.1, "A", transform=ax1.transAxes, fontsize=20, fontweight="bold", va="top")
+    ax1.text(-0.15, 1.1, "a", transform=ax1.transAxes, fontsize=20, fontweight="bold", va="top")
 
     # ---- Panel B: PC2 loadings ----
     pc2_sorted = loadings[['feature_names','PC2']]
@@ -743,7 +743,7 @@ def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['ag
     ax2.set_yticklabels([-0.5, 0, 0.5])
     ax2.set_xlabel('HMM states')
     ax2.set_ylabel("PC2 Loadings")
-    ax2.text(-0.15, 1.1, "B", transform=ax2.transAxes, fontsize=20, fontweight="bold", va="top")
+    ax2.text(-0.15, 1.1, "b", transform=ax2.transAxes, fontsize=20, fontweight="bold", va="top")
 
     # ---- Panel D: Partial regression PC1 ~ HADS ----
     ax3 = fig.add_subplot(gs[1, 0])
@@ -751,7 +751,7 @@ def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['ag
     ax3.set_xlabel("baseline HADS-D")
     ax3.set_ylabel("baseline PC1")
     ax3.text(
-        -0.15, 1.1, "C",
+        -0.15, 1.1, "c",
         transform=ax3.transAxes,
         fontsize=20,
         fontweight="bold",
@@ -765,7 +765,7 @@ def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['ag
     ax4.set_xlabel("baseline HADS-D")
     ax4.set_ylabel("baseline PC2")
     ax4.text(
-        -0.15, 1.1, "D",
+        -0.15, 1.1, "d",
         transform=ax4.transAxes,
         fontsize=20,
         fontweight="bold",
