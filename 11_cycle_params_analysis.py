@@ -10,11 +10,9 @@ Last update: 19/01/2026
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import os
 import pickle
 
 import statsmodels.formula.api as smf
-import statsmodels.api as sm
 from scipy.stats import zscore, ttest_1samp
 
 from statsmodels.graphics.regressionplots import plot_partregress
@@ -57,7 +55,7 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
-n_states=8
+n_states=6
 sess_idx=99
 
 # where are the symptoms stored
