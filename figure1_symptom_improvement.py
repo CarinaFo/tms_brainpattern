@@ -18,7 +18,7 @@ plt.rcParams['pdf.fonttype']=42
 
 # linux doesn't have Arial
 plt.rcParams.update({
-    "font.family": "sans-serif",
+    "font.family": "Arial",
     "font.sans-serif": ["DejaVu Sans"],
     "font.size": 12,
     "axes.labelsize": 14,
@@ -169,8 +169,8 @@ def plot_symptom_change_hads(all_weeks: bool = False, outcome_variable: str = 'h
             x="session",
             y=outcome_variable,
             data=var_per_session,
-            estimator="mean",
-            errorbar="se",
+            estimator="median",
+            errorbar="ci",
             marker="o",
             linewidth=2
         )
@@ -560,6 +560,7 @@ def plot_change_correlations_quadrants(
                 ax.set_xticklabels([])
 
     fig.tight_layout()
+    plt.savefig(f'{fig_dir}/clinical_scores_corr.svg')
     plt.show()
 
     return diff, corr
