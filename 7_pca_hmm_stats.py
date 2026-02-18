@@ -93,63 +93,6 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
 
     plot_demographics(df)
 
-    metrics = ["fo", "sr", "lt", "intv"]
-
-    # Average across sessions
-    df_avg = (
-        df
-        .groupby(["patient", "state"])[metrics]
-        .mean()
-        .reset_index()
-    )
-
-    states = sorted(df_avg["state"].unique())
-    n_states = len(states)
-
-    # Layout: 2 rows x 5 columns
-    n_rows = 2
-    n_cols = 5
-
-    fig, axes = plt.subplots(
-        n_rows, n_cols,
-        figsize=(18, 7),
-        constrained_layout=True
-    )
-
-    # Mask diagonal
-    mask = np.eye(len(metrics), dtype=bool)
-
-    axes = axes.flatten()
-
-    for ax, state in zip(axes, states):
-        corr = (
-            df_avg[df_avg["state"] == state][metrics]
-            .corr(method="spearman")
-        )
-
-        sns.heatmap(
-            corr,
-            mask=mask,
-            ax=ax,
-            vmin=-1, vmax=1,
-            cmap="viridis",
-            annot=True, fmt=".2f",
-            square=True,
-            cbar=False
-        )
-
-        ax.set_title(f"State {state}", fontsize=20)
-        ax.tick_params(labelsize=18)
-
-    # Add a single shared colorbar
-    #cbar_ax = fig.add_axes([0.92, 0.25, 0.015, 0.5])
-    #sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(-1, 1))
-    #sm.set_array([])
-    #fig.colorbar(sm, cax=cbar_ax, label="Spearman ρ")
-
-    plt.savefig(f"{fig_dir}/hmm_summary_stats_correlations.svg")
-    plt.savefig(f"{fig_dir}/hmm_summary_stats_correlations.png", dpi=300)
-    plt.show()
 
     return df
 
@@ -239,7 +182,7 @@ def run_PCA(n_states: int, clr: bool = False):
     print(model.summary())
 
     # plot figure 2
-    plot_pca_baseline_hads(pca, df_sess1_pre, feature_cols, feature_names)
+    plot_pca_baseline_hads(pca, df_sess1_pre, feature_cols, feature_names, n_states)
 
     return df_clean
 
@@ -388,9 +331,10 @@ def plot_symptom_change_correlation(df, covariates, n_states):
 
     plt.tight_layout()
     plt.savefig(f'{fig_dir}/symptom_change_PC2FO_{n_states}.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{fig_dir}/symptom_change_PC2FO_{n_states}.svg', dpi=300, bbox_inches='tight')
     plt.show()
 
-    return 
+    return fig
 
 def plot_symptom_change(df):
 
@@ -680,18 +624,12 @@ def plot_variance_explained(explained):
     ax.set_ylabel('Cumulative Variance Explained (%)')
     ax.set_xticks(np.arange(1, len(explained) + 1))
 
-    ax.text(
-        -0.15, 1.1, "A",
-        transform=ax.transAxes,
-        fontsize=20,
-        fontweight="bold",
-        va="top"
-    )
-
     fig.tight_layout()
+    plt.savefig(f'{fig_dir}/variance_explained_fo.svg')
 
 
-def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['age', 'gender', 'years_with_depression', 'group']):
+def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, n_states, covariates=['age', 'gender', 'years_with_depression', 'group'],
+                            ):
     """
     Plots PCA summary (variance explained + loadings) and regression of PC1/PC2
     against HADS-D (partial regression adjusting for age and gender)
@@ -777,6 +715,10 @@ def plot_pca_baseline_hads(pca, df, feature_cols, feature_names, covariates=['ag
     for ax in fig.axes:
         for spine in ['top','right']:
             ax.spines[spine].set_visible(False)
+    
+    plt.savefig(f'{fig_dir}/PC_baseline_{n_states}.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{fig_dir}/PC_baseline_{n_states}.svg', dpi=300, bbox_inches='tight')
+    
     return fig
 
 
@@ -785,3 +727,56 @@ def clr(X, eps=1e-10):
     X = np.clip(X, eps, None)               # avoid log(0)
     gm = np.exp(np.mean(np.log(X), axis=1, keepdims=True))
     return np.log(X / gm)
+
+
+def plot_correlations_summary_stats(df: pd.DataFrame):
+
+    metrics = ["fo", "sr", "lt", "intv"]
+
+    # Average across sessions
+    df_avg = (
+        df
+        .groupby(["patient", "state"])[metrics]
+        .mean()
+        .reset_index()
+    )
+
+    states = sorted(df_avg["state"].unique())
+
+    # Layout: 2 rows x 5 columns
+    n_rows = 2
+    n_cols = 5
+
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(10, 6),
+        constrained_layout=True
+    )
+
+    # Mask diagonal
+    mask = np.eye(len(metrics), dtype=bool)
+
+    axes = axes.flatten()
+
+    for ax, state in zip(axes, states):
+        corr = (
+            df[df["state"] == state][metrics]
+            .corr(method="spearman")
+        )
+
+        sns.heatmap(
+            corr,
+            mask=mask,
+            ax=ax,
+            vmin=-1, vmax=1,
+            cmap="viridis",
+            annot=True, fmt=".2f",
+            square=True,
+            cbar=False
+        )
+
+        ax.set_title(f"State {state}", fontsize=20)
+
+    plt.savefig(f"{fig_dir}/hmm_summary_stats_correlations.svg")
+    plt.savefig(f"{fig_dir}/hmm_summary_stats_correlations.png", dpi=300)
+    plt.show()
