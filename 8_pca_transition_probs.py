@@ -15,10 +15,24 @@ import statsmodels.formula.api as smf
 from scipy.stats import zscore
 
 import matplotlib.pyplot as plt
-import seaborn as sns
 from statsmodels.graphics.regressionplots import plot_partregress
-from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import gridspec
+
+
+# setting for nature publishing
+plt.rcParams['pdf.fonttype']=42
+
+# linux doesn't have Arial
+plt.rcParams.update({
+    "font.family": "Arial",
+    "font.sans-serif": ["DejaVu Sans"],
+    "font.size": 12,
+    "axes.labelsize": 14,
+    "axes.titlesize": 14,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 13,
+    "legend.fontsize": 12,
+})
 
 # --------------------------------------------------
 # Set Paths
@@ -37,7 +51,7 @@ else:
     "No available system path defined *windows* or *linux*"
 
 # where are the HMM summary stats stored
-hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_1Hzcanonical_3Hzfiltered')
+hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
 
 fig_dir = Path(f'{hmm_dir}/figures')
 
@@ -114,6 +128,9 @@ def add_PCA_to_data(n_states: int):
     '''add PCs to the clinical dataframe'''
 
     X, transitions, X_pca, pca, loadings = run_PCA_on_transition_matrix(6, n_states=n_states, cycles=False)
+
+    # plot and save transition probabilities (averaged over sessions and participants)
+    plot_transition_probs(transitions)
 
     # open clinical dataframe
     csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
@@ -282,7 +299,7 @@ def plot_symptom_change_correlation(df, covariates):
 
     fig, (ax1, ax2) = plt.subplots(
         1, 2,
-        figsize=(7.1, 6),
+        figsize=(8, 3),
         sharey=True,
         gridspec_kw={"wspace": 0.4}
     )
@@ -299,7 +316,7 @@ def plot_symptom_change_correlation(df, covariates):
     ax1.set_xlabel("Δ HADS-D")
     ax1.set_ylabel("Δ PC2")
     ax1.text(
-        -0.15, 1.1, "A",
+        -0.15, 1.1, "a",
         transform=ax1.transAxes,
         fontsize=20,
         fontweight="bold",
@@ -319,7 +336,7 @@ def plot_symptom_change_correlation(df, covariates):
     ax2.set_xlabel("Δ HADS-D")
     ax2.set_ylabel("")  # avoid duplicate label
     ax2.text(
-        -0.15, 1.1, "B",
+        -0.15, 1.1, "b",
         transform=ax2.transAxes,
         fontsize=20,
         fontweight="bold",
@@ -333,13 +350,13 @@ def plot_symptom_change_correlation(df, covariates):
             ax.spines[spine].set_visible(False)
 
     plt.tight_layout()
-    plt.savefig(f'{fig_dir}/symptom_change_PC2transitions.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{fig_dir}/symptom_change_PC2transitions.svg', dpi=300, bbox_inches='tight')
     plt.show()
 
 
 def plot_variance_explained(explained):
 
-    fig, ax = plt.subplots(figsize=(7.1, 6))
+    fig, ax = plt.subplots(figsize=(4, 3.5))
 
     ax.plot(
         np.arange(1, len(explained) + 1),
@@ -351,17 +368,11 @@ def plot_variance_explained(explained):
 
     ax.set_xlabel('Principal Component')
     ax.set_ylabel('Cumulative Variance Explained (%)')
-    ax.set_xticks([30, 60, 90])
-
-    ax.text(
-        -0.15, 1.1, "A",
-        transform=ax.transAxes,
-        fontsize=20,
-        fontweight="bold",
-        va="top"
-    )
+    ax.set_xticks([1, 30, 60, 90])
 
     fig.tight_layout()
+
+    plt.savefig(f'{fig_dir}/variance_explained_transitions.svg', dpi=300, bbox_inches='tight')
 
 
 def plot_pca_heatmap_baseline_hads(pc, loadings, df, covariates=['age', 'gender', 'years_with_depression', 'group']):
@@ -383,36 +394,33 @@ def plot_pca_heatmap_baseline_hads(pc, loadings, df, covariates=['age', 'gender'
     pc_1 = loadings[0, :]
     pc_2 = loadings[1, :]
 
-    # ---- Colorblind-friendly palette ----
-    neg_color = '#56B4E9'  # blue
-    pos_color = '#E69F00'  # orange
-
     # ---- Panel A: PC1 loadings ----
     mat = np.zeros((n_states, n_states))
     mat[~np.eye(n_states, dtype=bool)] = pc_1
     mat[np.eye(n_states, dtype=bool)] = np.nan  # mask diagonal
 
-    # Custom diverging colormap: red → white → blue
-    cmap = LinearSegmentedColormap.from_list('orange_blue', [neg_color, 'white', pos_color])
-
     ax1 = fig.add_subplot(gs[0, 0])
     
-    sns.heatmap(mat, annot=False, cmap=cmap, center=0, fmt=".2f", ax=ax1,
-                xticklabels=[f"{j+1}" for j in range(n_states)],
-                yticklabels=[f"{i+1}" for i in range(n_states)],
-                mask=np.isnan(mat),
-                linewidths=0.5,
-                linecolor='lightgrey',
-                cbar_kws={'shrink':0.8})
+    im1 = ax1.imshow(mat,  cmap='viridis')
 
-    # Overlay grey diagonal
-    for j in range(n_states):
-        plt.gca().add_patch(plt.Rectangle((j, j), 1, 1, fill=True, color='grey', zorder=2))
+    # Set ticks
+    ax1.set_yticks(range(n_states))
+    ax1.set_xticks(range(n_states))
+    ax1.set_xticklabels([f"{j+1}" for j in range(n_states)])
+    ax1.set_yticklabels([f"{i+1}" for i in range(n_states)])
 
+    # Axis labels
     ax1.set_xlabel("To state")
     ax1.set_ylabel("From state")
-    ax1.text(-0.15, 1.1, "A  PC1 loadings", transform=ax1.transAxes,
-             fontsize=18, fontweight="bold", va="top")
+
+    # Colorbar
+    cbar = plt.colorbar(im1, ax=ax1, shrink=0.8)
+    cbar.set_label("Transition probabilities")
+
+    ax1.text(-0.15, 1.1, "a",
+            transform=ax1.transAxes,
+            fontsize=20,
+            va="top")
     
     # ---- Panel A: PC2 loadings ----
     mat = np.zeros((n_states, n_states))
@@ -421,22 +429,25 @@ def plot_pca_heatmap_baseline_hads(pc, loadings, df, covariates=['age', 'gender'
 
     ax2 = fig.add_subplot(gs[0, 1])
     
-    sns.heatmap(mat, annot=False, cmap=cmap, center=0, fmt=".2f", ax=ax2,
-                xticklabels=[f"{j+1}" for j in range(n_states)],
-                yticklabels=[f"{i+1}" for i in range(n_states)],
-                mask=np.isnan(mat),
-                linewidths=0.5,
-                linecolor='lightgrey',
-                cbar_kws={'shrink':0.8})
+    im2 = ax2.imshow(mat, cmap='viridis')
 
-    # Overlay grey diagonal
-    for j in range(n_states):
-        plt.gca().add_patch(plt.Rectangle((j, j), 1, 1, fill=True, color='grey', zorder=2))
+    # Set labels
+    ax2.set_yticks(range(n_states))
+    ax2.set_xticks(range(n_states))
+    ax2.set_xticklabels([f"{j+1}" for j in range(n_states)])
+    ax2.set_yticklabels([f"{i+1}" for i in range(n_states)])
 
+    # Axis labels
     ax2.set_xlabel("To state")
     ax2.set_ylabel("From state")
-    ax2.text(-0.15, 1.1, "B  PC2 loadings", transform=ax2.transAxes,
-             fontsize=18, fontweight="bold", va="top")
+
+    # Colorbar
+    cbar = plt.colorbar(im2, ax=ax2, shrink=0.6)
+
+    ax1.text(-0.15, 1.1, "a",
+            transform=ax2.transAxes,
+            fontsize=20,
+            va="top")
 
     # ---- Panel D: Partial regression PC1 ~ HADS ----
     ax3 = fig.add_subplot(gs[1, 0])
@@ -444,7 +455,7 @@ def plot_pca_heatmap_baseline_hads(pc, loadings, df, covariates=['age', 'gender'
     ax3.set_xlabel("baseline HADS-D")
     ax3.set_ylabel("baseline PC1")
     ax3.text(
-        -0.15, 1.1, "C",
+        -0.15, 1.1, "c",
         transform=ax3.transAxes,
         fontsize=20,
         fontweight="bold",
@@ -458,7 +469,7 @@ def plot_pca_heatmap_baseline_hads(pc, loadings, df, covariates=['age', 'gender'
     ax4.set_xlabel("baseline HADS-D")
     ax4.set_ylabel("baseline PC2")
     ax4.text(
-        -0.15, 1.1, "D",
+        -0.15, 1.1, "d",
         transform=ax4.transAxes,
         fontsize=20,
         fontweight="bold",
@@ -470,5 +481,46 @@ def plot_pca_heatmap_baseline_hads(pc, loadings, df, covariates=['age', 'gender'
     for ax in fig.axes:
         for spine in ['top','right']:
             ax.spines[spine].set_visible(False)
+    
+    plt.savefig(f'{fig_dir}/pca_baseline_transitions.svg')
 
     return fig
+
+def plot_transition_probs(transitions: np.ndarray):
+    
+    # Mean across sessions and patients
+    trans_mean = np.mean(transitions, axis=(0, 1))
+
+    n_states = trans_mean.shape[0]
+    states = np.arange(1, n_states + 1)
+
+    # Extract diagonal
+    diag_vals = np.diag(trans_mean)
+
+    # Mask diagonal in matrix
+    mask = np.eye(n_states, dtype=bool)
+    trans_masked = np.ma.masked_array(trans_mean, mask=mask)
+
+    # Create figure
+    fig, axes = plt.subplots(1, 2, figsize=(8, 3.5), constrained_layout=True)
+
+    # --- Left: Off-diagonal transition matrix ---
+    im = axes[0].imshow(trans_masked)
+    axes[0].set_yticks(range(n_states))
+    axes[0].set_xticklabels(states)
+    axes[0].set_yticklabels(states)
+    axes[0].set_xlabel("To state")
+    axes[0].set_ylabel("From state")
+
+    cbar = fig.colorbar(im, ax=axes[0])
+
+    # --- Right: Diagonal (self-transitions) ---
+    axes[1].bar(states, diag_vals)
+    axes[1].set_title("Self-transitions")
+    axes[1].set_xlabel("State")
+    axes[1].set_ylabel("Transition probability")
+    axes[1].set_xticks(states)
+    plt.savefig(f'{fig_dir}/transitions_probs_mean.svg')
+    plt.show()
+
+
