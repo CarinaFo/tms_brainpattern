@@ -172,6 +172,12 @@ def analyse_cycle_params(df):
     df_clean = df_clean.drop_duplicates(subset=['patient', 'session', 'tms'])
 
     plt.hist(df_clean['cycle_strength'])
+    plt.xlabel('Cycle strength')
+    plt.savefig(f'{output_dir}/cycle_strength_hist.svg')
+
+    plt.hist(df_clean['cycle_rate'])
+    plt.xlabel('Cycle rate')
+    plt.savefig(f'{output_dir}/cycle_rate_hist.svg')
 
     # zscore and remove outlier
     df_removeoutlier = df_clean[
@@ -212,7 +218,7 @@ def analyse_cycle_params(df):
 
     # does PC predict hads score in session 1
     df_sess1_pre = df_removeoutlier.query("session == 1 and tms == 'pre'")
-    model = smf.ols("cycle_rate ~ scale(hads_dep_total) + scale(age) + gender + scale(years_with_depression) + group", data=df_sess1_pre).fit()
+    model = smf.ols("np.log(cycle_rate) ~ scale(hads_dep_total) + scale(age) + gender + scale(years_with_depression) + group", data=df_sess1_pre).fit()
     print(model.summary())
 
     # does PC predict hads score in session 1
