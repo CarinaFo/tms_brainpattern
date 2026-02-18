@@ -9,8 +9,6 @@ from pathlib import Path
 import pickle
 import seaborn as sns
 
-system='linux'
-
 plot_psds = True
 plot_pow_maps = True
 plot_coh_nets = True
@@ -21,14 +19,9 @@ plot_sum_stats = True
 plot_state_time_course = True
 
 
-# HMMM output is stored on linux
-base_dir_linux = Path('/home/carinaf/canonical_hmm_finalsample')
-
 # Windows home dir to save figures
-base_dir_windows = Path("/home/carinaf/LabData/Lab_LucaC/Carina/")
-
-save_dir_windows = Path(f'{base_dir_windows}/hmm_fits_05Hzcanonical_1Hzfiltered')
-save_dir_linux = Path(f'{base_dir_linux}/hmm_fits_05Hzcanonical_1Hzfiltered')
+base_dir_windows = Path("L:/Lab_LucaC/Carina/")
+save_dir_windows = Path(f'{base_dir_windows}/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
 
 # Source reconstruction files
 mask_file = "MNI152_T1_8mm_brain.nii.gz"
@@ -36,7 +29,7 @@ parcellation_file = "fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii
 
 # New order for states
 #order = [3, 5, 7, 0, 1, 6, 9, 8, 4, 2] # Chet reordered based on power
-n_states = [10]
+n_states = [12]
 n_sessions = 1
 
 for state in n_states:
@@ -52,7 +45,7 @@ for state in n_states:
 
             # linux doesn't have Arial
             plt.rcParams.update({
-                "font.family": "sans-serif",
+                "font.family": "Arial",
                 "font.sans-serif": ["DejaVu Sans"],
                 "font.size": 10,
                 "axes.labelsize": 10,
@@ -63,11 +56,11 @@ for state in n_states:
             })
 
             # Load data
-            f = np.load(Path(f"{save_dir_linux}/f_{ses}_{state}.npy"))
-            psd = np.load(Path(f"{save_dir_linux}/psd_{ses}_{state}.npy"))#[:, order]
-            w = np.load(Path(f"{save_dir_linux}/w_{ses}_{state}.npy"))
-            fo = np.load(f"{save_dir_linux}/fo_{ses}_{state}.npy") #[:, order]
-            wb_comp = np.load(Path(f"{save_dir_linux}/nnmf_{ses}_{state}.npy"))
+            f = np.load(Path(f"{save_dir_windows}/f_{ses}_{state}.npy"))
+            psd = np.load(Path(f"{save_dir_windows}/psd_{ses}_{state}.npy"))#[:, order]
+            w = np.load(Path(f"{save_dir_windows}/w_{ses}_{state}.npy"))
+            fo = np.load(f"{save_dir_windows}/fo_{ses}_{state}.npy") #[:, order]
+            wb_comp = np.load(Path(f"{save_dir_windows}/nnmf_{ses}_{state}.npy"))
 
             # Group average PSD for each state
             gpsd = np.average(psd, axis=0, weights=w)
@@ -137,10 +130,10 @@ for state in n_states:
             })
 
             # Load data
-            f = np.load(Path(f"{save_dir_linux}/f_{ses}_{state}.npy"))
-            psd = np.load(Path(f"{save_dir_linux}/psd_{ses}_{state}.npy"))#[:, order]
-            w = np.load(Path(f"{save_dir_linux}/w_{ses}_{state}.npy"))
-            fo = np.load(f"{save_dir_linux}/fo_{ses}_{state}.npy") #[:, order]
+            f = np.load(Path(f"{save_dir_windows}/f_{ses}_{state}.npy"))
+            psd = np.load(Path(f"{save_dir_windows}/psd_{ses}_{state}.npy"))#[:, order]
+            w = np.load(Path(f"{save_dir_windows}/w_{ses}_{state}.npy"))
+            fo = np.load(f"{save_dir_windows}/fo_{ses}_{state}.npy") #[:, order]
 
             # Calculate group average
             gpsd = np.average(psd, axis=0, weights=w)
@@ -182,10 +175,10 @@ for state in n_states:
             })
 
             # Load data
-            f = np.load(Path(f"{save_dir_linux}/f_{ses}_{state}.npy"))
-            coh = np.load(Path(f"{save_dir_linux}/coh_{ses}_{state}.npy"))#[:, order]
-            w = np.load(Path(f"{save_dir_linux}/w_{ses}_{state}.npy"))
-            fo = np.load(f"{save_dir_linux}/fo_{ses}_{state}.npy") #[:, order]
+            f = np.load(Path(f"{save_dir_windows}/f_{ses}_{state}.npy"))
+            coh = np.load(Path(f"{save_dir_windows}/coh_{ses}_{state}.npy"))#[:, order]
+            w = np.load(Path(f"{save_dir_windows}/w_{ses}_{state}.npy"))
+            fo = np.load(f"{save_dir_windows}/fo_{ses}_{state}.npy") #[:, order]
 
             # Calculate group average
             gcoh = np.average(coh, axis=0, weights=w)
@@ -217,10 +210,10 @@ for state in n_states:
             })
 
             # Load data
-            f = np.load(Path(f"{save_dir_linux}/f_{ses}_{state}.npy"))
-            coh = np.load(Path(f"{save_dir_linux}/coh_{ses}_{state}.npy"))#[:, order]
-            w = np.load(Path(f"{save_dir_linux}/w_{ses}_{state}.npy"))
-            fo = np.load(f"{save_dir_linux}/fo_{ses}_{state}.npy") #[:, order]
+            f = np.load(Path(f"{save_dir_windows}/f_{ses}_{state}.npy"))
+            coh = np.load(Path(f"{save_dir_windows}/coh_{ses}_{state}.npy"))#[:, order]
+            w = np.load(Path(f"{save_dir_windows}/w_{ses}_{state}.npy"))
+            fo = np.load(f"{save_dir_windows}/fo_{ses}_{state}.npy") #[:, order]
 
 
             # Calculate group average
@@ -252,10 +245,10 @@ for state in n_states:
             })
 
             # Load data
-            f = np.load(Path(f"{save_dir_linux}/f_{ses}_{state}.npy"))
-            coh = np.load(Path(f"{save_dir_linux}/coh_{ses}_{state}.npy"))#[:, order]
-            w = np.load(Path(f"{save_dir_linux}/w_{ses}_{state}.npy"))
-            fo = np.load(f"{save_dir_linux}/fo_{ses}_{state}.npy") #[:, order]
+            f = np.load(Path(f"{save_dir_windows}/f_{ses}_{state}.npy"))
+            coh = np.load(Path(f"{save_dir_windows}/coh_{ses}_{state}.npy"))#[:, order]
+            w = np.load(Path(f"{save_dir_windows}/w_{ses}_{state}.npy"))
+            fo = np.load(f"{save_dir_windows}/fo_{ses}_{state}.npy") #[:, order]
 
 
             # Calculate power/coherence
@@ -297,7 +290,7 @@ for state in n_states:
             from mpl_toolkits.axes_grid1 import make_axes_locatable
 
             # Load data
-            tp = np.load(f"{save_dir_linux}/tp_{ses}_{state}.npy")
+            tp = np.load(f"{save_dir_windows}/tp_{ses}_{state}.npy")
             tp_mean = tp.mean(axis=0)
 
             # Extract the diagonal
@@ -377,10 +370,10 @@ for state in n_states:
             })
 
             # Load
-            fo = np.load(f"{save_dir_linux}/fo_{ses}_{state}.npy")
-            lt = np.load(f"{save_dir_linux}/lt_{ses}_{state}.npy")
-            intv = np.load(f"{save_dir_linux}/intv_{ses}_{state}.npy")
-            sr = np.load(f"{save_dir_linux}/sr_{ses}_{state}.npy")
+            fo = np.load(f"{save_dir_windows}/fo_{ses}_{state}.npy")
+            lt = np.load(f"{save_dir_windows}/lt_{ses}_{state}.npy")
+            intv = np.load(f"{save_dir_windows}/intv_{ses}_{state}.npy")
+            sr = np.load(f"{save_dir_windows}/sr_{ses}_{state}.npy")
 
             if state == 12:
                 from matplotlib import cm
@@ -396,12 +389,12 @@ for state in n_states:
                 )
             else:
                 plotting.plot_hmm_summary_stats(
-                    fo, lt, intv, sr, cmap=colors, filename=f"{save_dir_plots}/sum_stats__{ses}_{state}.png",
+                    fo, lt, intv, sr, cmap=colors, filename=f"{save_dir_plots}/sum_stats__{ses}_{state}.svg",
                 )
 
             # Plot the distribution of fractional occupancy (FO) across subjects
             plotting.plot_violin(fo.T, x_label="HMM State", y_label="Fractional Occupancies", sns_kwargs={'palette': colors},
-                                filename=f"{save_dir_plots}/fo_{ses}_{state}.png")
+                                filename=f"{save_dir_plots}/fo_{ses}_{state}.svg")
 
 
         if plot_state_time_course:
@@ -422,25 +415,19 @@ for state in n_states:
             import pickle
 
             # load stc
-            stc = pickle.load(open(f"{save_dir_linux}/states_{ses}_{state}.pkl", 'rb'))
+            stc = pickle.load(open(f"{save_dir_windows}/states_{ses}_{state}.pkl", 'rb'))
+
             # Calculate a state time course by taking the most likely state
             stc = modes.argmax_time_courses(stc)
             import random
             indices = random.sample(range(0, 40), 10)
 
-            if state == 12:
-                for idx in indices:
+            for idx in indices:
                     plotting.plot_alpha(stc[idx], cmap='tab20',
                     filename=f"{save_dir_plots}/stc_{idx}_{ses}_{state}.svg")
-            else:
-                for idx in indices:
+            for idx in indices:
                     plotting.plot_alpha(stc[idx], cmap='tab20',
                     filename=f"{save_dir_plots}/stc_{idx}_{ses}_{state}.png")
-
-# %%
-
-
-
 
 # %%
 
@@ -475,11 +462,11 @@ for state in n_states:
             })
 
             # Load data
-            f = np.load(Path(f"{save_dir_linux}/f_{ses}_{state}.npy"))
-            psd = np.load(Path(f"{save_dir_linux}/psd_{ses}_{state}.npy"))#[:, order]
-            w = np.load(Path(f"{save_dir_linux}/w_{ses}_{state}.npy"))
-            fo = np.load(f"{save_dir_linux}/fo_{ses}_{state}.npy") #[:, order]
-            wb_comp = np.load(Path(f"{save_dir_linux}/nnmf_{ses}_{state}.npy"))
+            f = np.load(Path(f"{save_dir_windows}/f_{ses}_{state}.npy"))
+            psd = np.load(Path(f"{save_dir_windows}/psd_{ses}_{state}.npy"))#[:, order]
+            w = np.load(Path(f"{save_dir_windows}/w_{ses}_{state}.npy"))
+            fo = np.load(f"{save_dir_windows}/fo_{ses}_{state}.npy") #[:, order]
+            wb_comp = np.load(Path(f"{save_dir_windows}/nnmf_{ses}_{state}.npy"))
 
             # Group average PSD for each state
             gpsd = np.average(psd, axis=0, weights=w)
