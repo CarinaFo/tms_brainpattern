@@ -13,6 +13,7 @@ import seaborn as sns
 from pathlib import Path
 import pandas as pd
 import statsmodels.formula.api as smf
+import mne
 
 # osl dynamics specific
 import osl_dynamics
@@ -25,8 +26,8 @@ os.chdir(Path('/home/carinaf/canonical_hmm_finalsample'))
 
 basedir = os.getcwd()
 source_dir = os.path.join(basedir, "source_reco_giles_parcel")
-prep_dir = os.path.join(basedir, "prepared_data_giles_1Hz_3Hzfiltereddata")
-save_dir = os.path.join(basedir, "hmm_fits_1Hzcanonical_3Hzfiltered")
+prep_dir = os.path.join(basedir, "prepared_data_giles_05Hz_1Hzfiltereddata")
+save_dir = os.path.join(basedir, "hmm_fits_05Hzcanonical_1Hzfiltered")
 os.makedirs(save_dir, exist_ok=True)
 os.makedirs(prep_dir, exist_ok=True)
 
@@ -137,7 +138,7 @@ def save_prep_data(parcellation: str = '38ROI_Giles'):
         data = Data(session, picks="misc", sampling_frequency=250, reject_by_annotation="omit", n_jobs=8)
 
         # drop bad segments before TDE
-        bad_segments_removed_data = data.prepare({'filter': {'low_freq': 3}, 
+        bad_segments_removed_data = data.prepare({'filter': {'low_freq': 1}, 
                                                 'remove_bad_segments': {"significance_level": 0.3,
                                                 "maximum_fraction": 0.4, 
                                                 "use_raw": False}})
@@ -427,3 +428,62 @@ def investigate_free_energy(session_free_energy: np.ndarray):
     plt.title("Free energy per session")
     plt.tight_layout()
     plt.show()
+
+
+def save_recording_info():
+
+    # get all sessions
+    id_list = sorted(os.listdir(source_dir))[:-2]
+
+    durations = []   # seconds
+    rows = []
+
+    for id in id_list:
+        ids = id[:-2]
+
+        if ids in excluded_subjects:
+            continue
+
+        fif_path = Path(source_dir) / id / "parc" / "lcmv-parc-raw.fif"
+        if not fif_path.exists():
+            print(f"Missing: {fif_path}")
+            continue
+
+        # preload=False is faster + lower memory when you only need metadata
+        raw = mne.io.read_raw_fif(fif_path, preload=False, verbose="ERROR")
+
+        dur_sec = raw.n_times / raw.info["sfreq"]
+        durations.append(dur_sec)
+
+        rows.append({
+            "patient": ids,
+            "file": str(fif_path),
+            "sfreq": raw.info["sfreq"],
+            "n_times": raw.n_times,
+            "duration_sec": dur_sec,
+            "duration_min": dur_sec / 60.0,
+        })
+
+    # Per-file table (nice to save/check)
+    df_dur = pd.DataFrame(rows)
+
+    # Summary stats
+    summary = {
+        "n_files": len(durations),
+        "mean_sec": float(np.mean(durations)) if durations else np.nan,
+        "median_sec": float(np.median(durations)) if durations else np.nan,
+        "min_sec": float(np.min(durations)) if durations else np.nan,
+        "max_sec": float(np.max(durations)) if durations else np.nan,
+    }
+    summary["mean_min"] = summary["mean_sec"] / 60.0
+    summary["median_min"] = summary["median_sec"] / 60.0
+    summary["min_min"] = summary["min_sec"] / 60.0
+    summary["max_min"] = summary["max_sec"] / 60.0
+
+    print("Summary (seconds):", {k: summary[k] for k in ["n_files","mean_sec","median_sec","min_sec","max_sec"]})
+    print("Summary (minutes):", {k: summary[k] for k in ["mean_min","median_min","min_min","max_min"]})
+
+    # Optional: save outputs
+    out_csv = Path(source_dir) / "recording_durations.csv"
+    df_dur.to_csv(out_csv, index=False)
+    print("Saved per-file durations:", out_csv)
