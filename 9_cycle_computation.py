@@ -36,10 +36,10 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 # set working directory
-base_dir = Path('/home/carinaf/LabData')
+base_dir = Path('L:/')
 
 # where are the HMM summary stats stored
-hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_1Hzcanonical_3Hzfiltered')
+hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 output_dir.mkdir(parents=True, exist_ok=True)
@@ -220,7 +220,7 @@ def test_sign_cycle(test_group: bool = True, null_model: list = None,
     plt.hist(group_null)
     plt.vlines(group_observed, 0, 250, color='red', label='observed')
     plt.legend()
-    plt.savefig(f'{output_dir}/permutations_cycle_strength_{n_states}')
+    plt.savefig(f'{output_dir}/permutations_cycle_strength_{n_states}.svg')
     plt.show()
 
     return p_value
