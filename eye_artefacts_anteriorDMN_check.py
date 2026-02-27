@@ -1,5 +1,6 @@
+# Run in MNE environment or base python
+# check if frontal DMN state is mainly active during eye movements (ica component for eye movements)
 import os
-import random
 import numpy as np
 import pandas as pd
 from glob import glob
@@ -23,12 +24,14 @@ frontal_parcels = {
     38: "ACC"
 }
 
+# windows paths
 preproc_path = Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/preprocessed")
-source_path  = Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/source_reco_giles")
+source_path  = Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/source_reco_giles_parcel")
 
 patient_sessions = {}
 
-for sess_dir in sorted(glob(os.path.join(preproc_path, "*_*"))):
+for sess_dir in sorted(glob(os.path.join(preproc_path, "*_*")))[:-1]:
+
     sess_id = os.path.basename(sess_dir)
 
     if not os.path.isdir(sess_dir):
@@ -43,7 +46,7 @@ for sess_dir in sorted(glob(os.path.join(preproc_path, "*_*"))):
 
     # RAW file (flat, NOT inside session folder)
     raw_crop_path = os.path.join(
-        preproc_path, f"{sess_id}_preproc-raw.fif"
+        preproc_path, f"{sess_id}/{sess_id}_preproc-raw.fif"
     )
     if not os.path.exists(raw_crop_path):
         continue
@@ -71,57 +74,62 @@ for sess_dir in sorted(glob(os.path.join(preproc_path, "*_*"))):
         "src_path": src_path
     })
 
+# load patient ID list
+patient_ids = pd.read_csv(Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/prepared_data_giles_1Hz_3Hzfiltereddata/patients_fitted_for_this_hmm.csv"))
 
-random.seed(42)
+assert len(patient_ids) == 70
 
-valid_patients = [p for p, s in patient_sessions.items() if len(s) > 0]
-selected_patients = sorted(random.sample(valid_patients, 20))
-np.save(Path('L:/Lab_LucaC/Carina/canonical_hmm_finalsample/eyemovement_test/test_patients.npy'), np.array(selected_patients))
+# load state time course for the first EEG session (baseline)
+# state time course without bad segment rejection to match source and prepro data length
+stc = pickle.load(open("L:\Lab_LucaC\Carina\canonical_hmm_finalsample\hmm_fits_05Hzcanonical_1Hzfiltered\states_0_10_nobadsegmentsrej.pkl", 'rb'))
+# stc is missing 400 datapoints due to TDE
 
-print("Selected patients:")
-for p in selected_patients:
-    print(f"  Patient {p} ({len(patient_sessions[p])} sessions)")
-
-# load stc
-stc = pickle.load(open(Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/eyemovement_test/states_0_6.pkl"), 'rb'))
-
+r_stc_eye_ic_corr, p_stc_eye_ic_corr  = [], []
 all_results = []
 
-for idx, patient_id in enumerate(selected_patients):
+# loop over patients analysed with HMM
+for idx, patient_id in enumerate(patient_ids['patient_id']):
+
     print(f"\n=== Patient {patient_id} ===")
 
-    if patient_id == '123':
-        continue
-
     for sess in patient_sessions[patient_id]:
-        print(f"  Processing session {sess['session']}")
+        if sess['session'][-1] == '1':
 
-        raw = mne.io.read_raw_fif(sess["raw_path"], preload=True, verbose=False)
-        ica = mne.preprocessing.read_ica(sess["ica_path"])
-        raw_src = mne.io.read_raw_fif(sess["src_path"], preload=True, verbose=False)
-        stc_patient = stc[idx]
-        src_data = raw_src.get_data()
+            print(f"  Processing session {sess['session']}")
 
-        # Find EOG ICs
-        eog_inds, _ = ica.find_bads_eog(raw)
-        if len(eog_inds) == 0:
-            print("    ⚠ No EOG ICs found — skipping")
+            raw = mne.io.read_raw_fif(sess["raw_path"], preload=True, verbose=False)
+            ica = mne.preprocessing.read_ica(sess["ica_path"])
+            raw_src = mne.io.read_raw_fif(sess["src_path"], preload=True, verbose=False)
+
+            stc_patient = stc[idx]
+            src_data = raw_src.get_data()
+
+            # Find EOG ICs
+            eog_inds, _ = ica.find_bads_eog(raw)
+            
+            # skip if no eogs
+            if eog_inds == []:
+                continue
+
+            # Eye IC time series
+            eye_ts = (
+                ica.get_sources(raw)
+                .get_data(picks=eog_inds)
+                .mean(axis=0)
+            )
+
+            eyes_ts_trimmed = apply_same_trimming(np.array(eye_ts))
+
+            assert eyes_ts_trimmed.shape[0] == stc_patient.shape[0]
+
+            r, p = spearmanr(stc_patient[:, 1], eyes_ts_trimmed)
+
+            r_stc_eye_ic_corr.append(r)
+            p_stc_eye_ic_corr.append(p)
+        else:
             continue
 
-        # Eye IC time series
-        eye_ts = (
-            ica.get_sources(raw)
-               .get_data(picks=eog_inds)
-               .mean(axis=0)
-        )
-
-        # timepoints must match
-        assert src_data.shape[1] == raw.get_data().shape[1]
-        assert stc_patient.shape[1] == raw.get_data().shape[1]
-
-        r, p = spearmanr(stc_patient[:, 1], eye_ts)
-
-        print(r, p)
+        assert src_data.shape[1] == eye_ts.shape[0]
 
         # Correlate frontal parcels
         for idx_1b, label in frontal_parcels.items():
@@ -155,3 +163,18 @@ plt.title("Distribution of eye–parcel correlations per parcel")
 plt.xticks(rotation=45, ha="right")
 plt.tight_layout()
 plt.show()
+
+
+# trim the data to match the state time course
+
+def apply_same_trimming(array, sequence_length=400, n_embeddings=15):
+    n_remove = n_embeddings // 2
+
+    # 1. Remove embedding edges
+    trimmed = array[n_remove:-n_remove]
+
+    # 2. Remove remainder from sequencing
+    n_keep = (trimmed.shape[0] // sequence_length) * sequence_length
+    trimmed = trimmed[:n_keep]
+
+    return trimmed
