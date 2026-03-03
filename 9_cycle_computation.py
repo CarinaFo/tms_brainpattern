@@ -44,11 +44,10 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 output_dir.mkdir(parents=True, exist_ok=True)
 
-# set up states and sessions
-nses=6
-nsubs=70
+nses=6 # we have 6 sessions
+nsubs=70 # for 70 patients
 
-def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int, 
+def calc_cycle_strength(ses_idx: int, n_states: int, 
                         permute_states: bool, n_permutations: int, n_cores_avail: int):
     """
     Computes the best sequence of HMM states for the group, each subject, and each session (code from Mats)
@@ -65,22 +64,18 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     Returns:
         numpy array with cycle strengths
     """
-    if cycle_allsessions:
-        # we load the stc for each session (stacked in a list of patients, list of sessions, timeseries X states)
-        # we use SUBJECT MAJOR ordering, e.g. patient 1 session 1, patient 1 session 2 etc.
-        stc = concatenate_sessions_per_patient(nses, True, n_states)
-        ses_idx = 99
-    else:
-        stc = pickle.load(open(Path(f"{hmm_dir}/states_{ses_idx}_{n_states}.pkl"), 'rb'))
+
+    # we load the stc for each session (stacked in a list of patients, list of sessions, timeseries X states)
+    # we use SUBJECT MAJOR ordering, e.g. patient 1 session 1, patient 1 session 2 etc.
+    stc = concatenate_sessions_per_patient(nses, n_states, True)
 
     assert len(stc) == nsubs
 
-    if cycle_allsessions:
-        # flatten the list ( we have now subject X sessions stacked vertically, e.g. patient 1 session 1, patient 1 session 2...)
-        stc_filtered = [session for patient in stc for session in patient]
-        pickle.dump({"stc": stc_filtered}, open(f'{output_dir}/stc_{ses_idx}_{n_states}.pkl', 'wb'))
+    # flatten the list ( we have now subject X sessions stacked vertically, e.g. patient 1 session 1, patient 1 session 2...)
+    stc_filtered = [session for patient in stc for session in patient]
+    pickle.dump({"stc": stc_filtered}, open(f'{output_dir}/stc_{ses_idx}_{n_states}.pkl', 'wb'))
 
-    fo = modes.fractional_occupancies(stc_filtered)  # shape (n_states, n_features)
+    fo = modes.fractional_occupancies(stc_filtered)  # shape (n_observations, n_states)
     sns.boxplot(fo)
     plt.xlabel('States')
     plt.ylabel('Fractional Occupancy')
@@ -92,7 +87,7 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     stc_onoff = modes.argmax_time_courses(stc_filtered)
 
     # permute state time course state labels within each patient
-    # and calculate cycle strength for each permutation
+    # and save cycle strength for each permutation
     if permute_states:
 
         start_time = time.time()
@@ -114,14 +109,14 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
         return null_model
 
     # apply tinda to stc
-    fo_density, fo_sum, stats = tinda(stc_onoff)
+    fo_density, _, stats = tinda(stc_onoff)
     
     # now compute best sequence
     best_sequence = optimise_sequence(fo_density)
 
-    # FO asymmetry (takes fo density and calculates difference between first and second interval and subtracts mean (normalizes the data))
-    asym = np.squeeze((fo_density[:, :, 0] - fo_density[:, :, 1])/np.mean(fo_density, axis=2)) # shape is n_states, n_states, n_patients*n_sessions
-    
+    # normalised FO asymmetry
+    asym = compute_asym(fo_density)
+
     np.save(f'{output_dir}/fo_asymmetry_{ses_idx}_{n_states}.npy', asym)
 
     # should we plot this instead? normalizes FO asymmetry over patients
@@ -177,9 +172,9 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     # now calculcate cycle strength (on a group basis)
     angleplot = circle_angles(best_sequence)
 
-    # calculate cycle strength
-    cyc_strength = compute_cycle_strength(angleplot, asym, 
-                                                relative=True)
+    # calculate cycle strength (normalised)
+    cyc_strength = compute_cycle_strength(angleplot, asym, relative=True)
+
     # save observed cycle strength
     np.save(f'{output_dir}/observed_cycle_strength_{ses_idx}_{n_states}.npy', cyc_strength)
 
@@ -197,150 +192,87 @@ def calc_cycle_strength(cycle_allsessions: bool, ses_idx: int, n_states: int,
     return cyc_strength
 
 
-def test_sign_cycle(test_group: bool = True, null_model: list = None, 
-                          observed: np.ndarray = None, n_states: int = 6):
-    
-    # load null model
-    null_model = np.load(f'{output_dir}/null_model_{ses_idx}_{n_states}.npy')
-    observed = np.load(f'{output_dir}/observed_cycle_strength_{ses_idx}_{n_states}.npy')
+def test_sign_cycle(ses_idx: int, n_states: int, test_group: bool = True):
+
+    null_model = np.load(f"{output_dir}/null_model_{ses_idx}_{n_states}.npy")
+    observed = np.load(f"{output_dir}/observed_cycle_strength_{ses_idx}_{n_states}.npy")
+
+    null_model = np.asarray(null_model)
+    observed = np.asarray(observed)
+
+    n_perm = null_model.shape[0]
 
     if test_group:
-        # take mean over sample
-        group_null = np.mean(np.array(null_model), axis=1) # shape is n_permutations
-        group_observed = np.mean(observed) # scalar
+        # null_model expected shape: (n_perm, n_samples) OR (n_perm,) depending on what you saved
+        if null_model.ndim == 2:
+            group_null = null_model.mean(axis=1)
+        else:
+            group_null = null_model
 
-        p_value = np.mean(group_null > group_observed)
-        print(p_value)
-    else:     
-        # compare within each sample
-        p_value = np.mean(np.array(null_model) > observed)
-        print(p_value)
+        group_observed = observed.mean() if observed.ndim > 0 else float(observed)
 
-    # plot permutation test outcome
-    plt.hist(group_null)
-    plt.vlines(group_observed, 0, 250, color='red', label='observed')
-    plt.legend()
-    plt.savefig(f'{output_dir}/permutations_cycle_strength_{n_states}.svg')
-    plt.show()
+        # one-sided: observed > null
+        p = (np.sum(group_null >= group_observed) + 1) / (len(group_null) + 1)
 
-    return p_value
+        plt.hist(group_null, bins=30)
+        plt.axvline(group_observed, color="red", linewidth=2, label="observed")
+        plt.legend()
+        plt.savefig(f"{output_dir}/permutations_cycle_strength_group_{ses_idx}_{n_states}.svg")
+        plt.show()
+
+        return p
+
+    else:
+        # subject-level p-values (requires null_model shape: (n_perm, n_samples))
+        if null_model.ndim != 2:
+            raise ValueError("For subject-level p-values, null_model must be shape (n_perm, n_samples).")
+
+        if observed.ndim != 1 or observed.shape[0] != null_model.shape[1]:
+            raise ValueError("Observed must be shape (n_samples,) matching null_model second dimension.")
+
+        p_sub = (np.sum(null_model >= observed[None, :], axis=0) + 1) / (n_perm + 1)
+        
+        return p_sub
 
 
-# Helper functions (move to utils at some point)
+# Helper functions (move to utils)
+def concatenate_sessions_per_patient(nses, n_states, threed_array=False):
+    """
+    Load HMM state probabilities for all sessions and reorganize per patient.
 
-def concatenate_sessions_per_patient(nses, threed_array: bool = None, n_states=None):
-    """ concatenate state time courses for all sessions and patients"""
-    all_sessions=[]
+    Returns:
+        If threed_array=False:
+            List of arrays per patient, concatenated across sessions.
+        If threed_array=True:
+            List of lists: per patient → per session arrays.
+    """
+    all_sessions = []
+
     for session_idx in range(nses):
-        # load state probabilities for each session
-        state_probs = pickle.load(open(Path(f"{hmm_dir}/states_{session_idx}_{n_states}.pkl"), 'rb'))
+        fp = Path(f"{hmm_dir}/states_{session_idx}_{n_states}.pkl")
+        with open(fp, "rb") as f:
+            state_probs = pickle.load(f)
+
         all_sessions.append(state_probs)
 
+    # Reorganise: session-major -> patient-major
     per_patient_session = list(zip(*all_sessions))
 
     if threed_array:
-        return [[np.array(session) for session in sessions] for sessions in per_patient_session]
+        return [
+            [np.asarray(sess) for sess in patient_sessions]
+            for patient_sessions in per_patient_session
+        ]
     else:
-        return [np.concatenate(sessions, axis=0) for sessions in per_patient_session]
-
-
-def load_and_trim_stcs(sess_list: list = range(nses)):
-    """ Load and trim all stcs to same length by removing from beginning and end."""
-    all_sessions = []
-
-    for session_idx in sess_list:
-        # List of 40 patients: each entry is array [T_i, S]
-        session_data = pickle.load(open(Path(f"{save_dir}/states_{session_idx}_{n_states}.pkl"), 'rb'))
-        all_sessions.append(session_data)
-
-    # Reorganize: list[patients][sessions] = array [T_i, S]
-    per_patient_sessions = list(zip(*all_sessions))  # shape: [n_patients][n_sessions]
-
-    # Find min T across all sessions for all patients
-    min_len = min(
-        session.shape[0]
-        for patient in per_patient_sessions
-        for session in patient
-    )
-
-    print(f"Minimum time length across all sessions: {min_len}")
-
-    # Now trim all sessions to min_len by cutting from both ends
-    trimmed = []
-    for patient_sessions in per_patient_sessions:
-        trimmed_patient = []
-        for session in patient_sessions:
-            T = session.shape[0]
-            cut = (T - min_len) // 2
-            trimmed_session = session[cut:cut + min_len, :]
-            trimmed_patient.append(trimmed_session)
-        trimmed.append(trimmed_patient)
-
-    return trimmed  # shape: [n_patients][n_sessions] = array[T_min, S]
-
-
-def order_states_based_on_coherence():
-
-    for session_idx in range(n_sessions):
-
-        # load frequencies
-        f = np.load(f"{tp_dir}/f_0_{n_states}.npy")
-
-        # load state probabilities for each session
-        state_probs = pickle.load(open(Path(f"{tp_dir}/states_{session_idx}_{n_states}.pkl"), 'rb'))
-
-        # load coherence for each session (reorder states based on coherence)
-        coh = np.load(Path(f"{tp_dir}/coh_{session_idx}_{n_states}.npy"))  # (n_subjects, n_states, n_parcels, n_parcels, n_freq)
-
-        # load NNMF weights
-        wb_comp = np.load(Path(f"{tp_dir}/nnmf_{session_idx}_{n_states}.npy"))
-
-        # load participant weights
-        w = np.load(Path(f"{tp_dir}/w_{session_idx}_{n_states}.npy"))  # (n_subjects,)
-
-        # calculate coherence averaged over participants
-        gcoh = np.average(coh, axis=0, weights=w)
-
-        # Calculate the coherence network by averaging over a frequency range
-        # we apply NNMF to the data (2 factors)
-        c = connectivity.mean_coherence_from_spectra(f, gcoh, wb_comp)
-
-        # shape of connectivity matrix: n_compos, n_states, n_parcels, n_parcels
-        cyc_strength_perms = run_TINDA(state_probs, None, True, 0, 100, 8)
-
-          # compute mean coherence for each state TODO: show Cameron or Mats or Chet
-        state_coherence_scores = compute_mean_coherence(coh, n_states)
-
-        # sort by coherence with higher coherence = earlier state
-        state_order = np.argsort(state_coherence_scores)[::-1]  # descending
-
-        # reorder state time courses to compare to Cam's cycles (van Es et al., 2025)
-        stc = [stc[:, state_order] for stc in stc]
-
-        # save state mapping (old state is now new state x)
-        state_mapping_df = pd.DataFrame({
-                "new_state": np.arange(len(state_order)),
-                "original_state": state_order
-            })
-        
-        # Save to CSV
-        state_mapping_df.to_csv(f"{tp_dir}/state_mapping_{session_idx}.csv", index=False)
-
-
-def compute_mean_coherence(coh: np.ndarray = None, n_states: int = None):
-    # Compute mean coherence (upper triangle only) for each state
-    state_coherence_scores = []
-    for s in range(n_states):
-        upper = np.triu(coh[0, s, :, :], k=1) # we look at coherence for the first component
-        mean_coh = upper[upper > 0].mean()
-        state_coherence_scores.append(mean_coh)
-
-    return state_coherence_scores
+        return [
+            np.concatenate(patient_sessions, axis=0)
+            for patient_sessions in per_patient_session
+        ]
 
 
 def permute_state_time_course(state_time_course: np.ndarray, n_states: int):
 
-    # Permute
+    # Permute state labels within each patient and each session
     permuted_state_time_course = [permute_state_sequences(stc, n_states) for stc in state_time_course]
 
     # TINDA
@@ -352,10 +284,10 @@ def permute_state_time_course(state_time_course: np.ndarray, n_states: int):
     # Angles
     angleplot = circle_angles(best_sequence)
 
-    # Asymmetry
-    asym = np.squeeze(np.nanmean((fo_density[:, :, 0] - fo_density[:, :, 1]), axis=2))
+    # normalised FO asymmetry
+    asym = compute_asym(fo_density)
 
-    # Cycle strength
+    # Cycle strength (normalised)
     cyc_strength = compute_cycle_strength(angleplot, asym, relative=True)
 
     return cyc_strength
@@ -377,3 +309,8 @@ def permute_state_sequences(state_sequences: np.ndarray, n_states: int = None):
     permuted_seq = state_sequences[:, perm]  # apply column permutation
 
     return permuted_seq
+
+
+def compute_asym(fo_density):
+    denom = np.mean(fo_density, axis=2, keepdims=True)
+    return np.squeeze((fo_density[:,:,0:1,:] - fo_density[:,:,1:2,:]) / denom)
