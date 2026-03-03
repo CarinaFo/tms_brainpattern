@@ -5,7 +5,7 @@ runs regression models to predict baseline symptoms and symptom improvement.
 
 Author: Carina Forster
 
-Last update: 19/01/2026
+Last update: 03/03/2026
 """
 import pandas as pd
 import numpy as np
@@ -15,11 +15,9 @@ import pickle
 import statsmodels.formula.api as smf
 from scipy.stats import zscore, ttest_1samp
 
-from statsmodels.graphics.regressionplots import plot_partregress
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.ticker as mticker
 
 # setting for nature publishing
@@ -56,79 +54,52 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
 n_states=10
-sess_idx=99
+sess_idx=99 # 99 is all sessions
 
 # where are the symptoms stored
 csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
 
-def which_run(nruns: int = 5):
+def load_cycle_parameters(n_states: int, sess_idx: int):
 
-    fe_allruns = [
-    pickle.load(open(f"{hmm_dir}/run{i+1}/free_energy.pkl", "rb"))
-    for i in range(1,5)
-    ]
-
-    which_run = int(np.argmin(fe_allruns))
-
-    return which_run
-
-def load_cycle_parameters():
-
-    with open(f"{hmm_dir}/figures/cycles/cycle_rate_{n_states}/run1/cycle_duration_{sess_idx}_{n_states}.pkl", "rb") as f:
-        cycle_duration = pickle.load(f)
-
-    # load tinda
-    with open(f"{output_dir}/tinda_{sess_idx}_{n_states}.pkl", "rb") as f:
+    with open(output_dir / f"tinda_{sess_idx}_{n_states}.pkl", "rb") as f:
         tinda = pickle.load(f)
 
-    cycle_strength = tinda['cycle_strength']
+    cycle_strength = tinda["cycle_strength"]
+    asym = tinda["asym"]
 
-    # load asymmetry matrix
-    asym = tinda['asym']
-    
+    fp = hmm_dir / "figures" / "cycles" / f"cycle_rate_{n_states}" / "run1" / f"cycle_duration_{sess_idx}_{n_states}.pkl"
+    with open(fp, "rb") as f:
+        cycle_duration = pickle.load(f)
+
     return asym, cycle_strength, cycle_duration
 
 
-def add_cycle_parameters_to_df():
-    
-    # asymmetry between state 1 and 2
-    state1to2 = asym[0,1,:]
-    state2to1 = asym[1,0,:]
+def add_cycle_parameters_to_df(n_states: int, sess_idx: int):
 
-    # load behavioural data
     df = pd.read_csv(csv_path)
-
     print(f"Analyzing {df['patient'].nunique()} patients")
 
-    assert df['patient'].nunique() == 70
+    # Only do this if the raw CSV is zero-indexed
+    df["state"] = df["state"] + 1
 
-    df["state"] = df["state"] + 1  # we want states starting from 1
-
-    # fill in demographic variables
     for col in ["age", "gender", "responder", "group"]:
         df[col] = df.groupby("patient")[col].transform("first")
 
-    # transform to categorical
-    for col in ["patient", "session", "tms", "state", "group", "responder"]:
+    for col in ["patient", "session", "tms", "state", "group", "responder", "gender"]:
         df[col] = df[col].astype("category", errors="ignore")
 
-    # get rid of states
     df_state1 = df[df["state"] == 1].copy()
 
-    # calculate mean cycle duration per patient and session
-    cycle_mean = [c.mean() for c in cycle_duration]
+    _, cycle_strength, cycle_duration = load_cycle_parameters(n_states=n_states, sess_idx=sess_idx)
 
-    # add cycle strength
-    df_state1['asym_12'] = state1to2
-    df_state1['asym_21'] = state2to1
-    df_state1['cycle_strength'] = cycle_strength
-    df_state1['cycle_duration'] = cycle_mean
-    df_state1['cycle_rate'] = df_state1['cycle_duration'].apply(lambda x: 1/x)
-    
-    df_state1.to_csv(f'{hmm_dir}/df_includingcycles_{n_states}.csv')
+    cycle_mean = [np.mean(c) for c in cycle_duration]
+    df_state1["cycle_strength"] = cycle_strength
+    df_state1["cycle_duration"] = cycle_mean
+    df_state1["cycle_rate"] = 1.0 / df_state1["cycle_duration"].astype(float)
 
+    out_csv = hmm_dir / f"df_includingcycles_{n_states}.csv"
+    df_state1.to_csv(out_csv, index=False)
     return df_state1
-
 
 
 def load_and_prep_data(n_states, exclude_repeater: bool = False):
@@ -162,79 +133,47 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
     for col in ["patient", "session", "tms", "state", 'responder', 'group', 'gender']:
         df[col] = df[col].astype("category", errors="ignore")
 
-    return df
+    df_cycle = df.copy()
 
+    return df_cycle
 
-def analyse_cycle_params(df):
+def analyse_cycle_params(n_states: int, robust="HC3"):
 
-    # drop state (no longer needed)
-    df_clean = df.drop(columns=['state'])
-    df_clean = df_clean.drop_duplicates(subset=['patient', 'session', 'tms'])
+    df_cycle = load_and_prep_data(n_states)
 
-    plt.hist(df_clean['cycle_strength'])
-    plt.xlabel('Cycle strength')
-    plt.savefig(f'{output_dir}/cycle_strength_hist.svg')
+    df_cycle['cycle_strength'] = df_cycle['cycle_strength']*100
 
-    plt.hist(df_clean['cycle_rate'])
-    plt.xlabel('Cycle rate')
-    plt.savefig(f'{output_dir}/cycle_rate_hist.svg')
+    df_clean = (
+        df_cycle
+        .drop(columns=["state"], errors="ignore")
+        .drop_duplicates(subset=["patient", "session", "tms"])
+        .copy()
+    )
 
-    # zscore and remove outlier
+    # outlier removal
     df_removeoutlier = df_clean[
-    (np.abs(zscore(df_clean['cycle_rate'], nan_policy='omit')) < 3) &
-    (np.abs(zscore(df_clean['cycle_strength'], nan_policy='omit')) < 3) &
-    (np.abs(zscore(df_clean['hads_dep_total'], nan_policy='omit')) < 3)
-    ]
+        (np.abs(zscore(df_clean["cycle_rate"].astype(float), nan_policy="omit")) < 3) &
+        (np.abs(zscore(df_clean["cycle_strength"].astype(float), nan_policy="omit")) < 3) &
+        (np.abs(zscore(df_clean["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
+    ].copy()
 
-    # Mixed model with random slopes for session
-    model = smf.mixedlm(
-        f'cycle_rate ~ session+tms',
-        data=df_removeoutlier,
-        groups='patient'
-    )
-    result = model.fit()
-    print(result.summary())
+    # baseline-only subset
+    d0 = df_removeoutlier.query("session == 1 and tms == 'pre'").copy()
 
-    g = sns.lmplot(
-        data=df_removeoutlier,
-        x='hads_dep_total',
-        y='cycle_strength',
-        col='session',
-        row='tms',
-        height=3.5,
-        aspect=1,
-        scatter_kws={'alpha': 0.7},
-        line_kws={'color': 'black'},
-        ci=95
-    )
+    m_rate = smf.ols("np.log(cycle_rate) ~ hads_dep_total + age + C(gender)", data=d0).fit(cov_type=robust)
+    m_strength = smf.ols("cycle_strength ~ hads_dep_total + age + C(gender)", data=d0).fit(cov_type=robust)
 
-    g.set_axis_labels('HADS', 'Cycle rate')
-    g.set_titles('Session {col_name} | {row_name} TMS')
+    print(m_rate.summary())
+    print(m_strength.summary())
 
-    plt.tight_layout()
-    plt.show()
+    plot_cycle_params_baseline_hads(d0, ses_idx=sess_idx, n_states=n_states)
 
-    cycle_metrics = ['cycle_strength', 'cycle_rate']
-
-    # does PC predict hads score in session 1
-    df_sess1_pre = df_removeoutlier.query("session == 1 and tms == 'pre'")
-    model = smf.ols("np.log(cycle_rate) ~ scale(hads_dep_total) + scale(age) + gender + scale(years_with_depression) + group", data=df_sess1_pre).fit()
-    print(model.summary())
-
-    # does PC predict hads score in session 1
-    df_sess1_pre = df_removeoutlier.query("session == 1 and tms == 'pre'")
-    model = smf.ols("cycle_strength ~ scale(hads_dep_total) + group + scale(age) + gender + scale(years_with_depression)", data=df_sess1_pre).fit()
-    print(model.summary())
-
-    # plot figure 2
-    plot_cycle_params_baseline_hads(df_sess1_pre, 99, n_states)
-    
     return df_removeoutlier
 
 
 def plot_pc_vs_symptom_change(n_states: int,
     symptom_col='hads_dep_total', 
-    covariates=['age', 'gender', 'years_with_depression', 'group']
+    covariates=['age', 'gender']
 ):
     """
     Test whether TMS-induced PC1/PC2 changes predict symptom change (ΔHADS-D)
@@ -242,139 +181,209 @@ def plot_pc_vs_symptom_change(n_states: int,
     Produces separate regression plots for PC1 and PC2.
     """
 
-    df = analyse_cycle_params(df)
+    df = analyse_cycle_params(10)
 
     # --- Data prep ---
-    df['session'] = df['session'].astype(int)
+    df["session"] = df["session"].astype(int)
 
-    # Function to compute Δ pre–post
     def compute_change(df, var):
-        wide = df.pivot_table(index=['patient', 'session'], columns='tms', values=var).reset_index()
-        wide[f'{var}_change'] = wide['pre'] - wide['post']
-        return wide[['patient', 'session', f'{var}_change']]
+        wide = df.pivot_table(index=["patient", "session"], columns="tms", values=var).reset_index()
+        wide[f"{var}_change"] = wide["pre"].astype(float) - wide["post"].astype(float)
+        return wide[["patient", "session", f"{var}_change"]]
 
-    cycle_strength_change = compute_change(df, 'cycle_strength')
-    cycle_rate_change = compute_change(df, 'cycle_rate')
+    cycle_strength_change = compute_change(df, "cycle_strength")
+    cycle_rate_change = compute_change(df, "cycle_rate")
 
-    # --- Symptom change across sessions ---
-    sym_wide = df.pivot_table(index='patient', columns='session', values=symptom_col).reset_index()
-    sym_wide['sym_change_s1_s2'] = sym_wide[1] - sym_wide[2]
-    sym_wide['sym_change_s2_s3'] = sym_wide[2] - sym_wide[3]
-    
-    sym_change = sym_wide.melt(
-        id_vars='patient',
-        value_vars=['sym_change_s1_s2', 'sym_change_s2_s3'],
-        var_name='session_change',
-        value_name='symptom_change'
+    # Symptoms wide (one row per patient)
+    sym_wide = (
+        df.pivot_table(index="patient", columns="session", values=symptom_col)
+        .reset_index()
+        .rename(columns={1: "s1", 2: "s2", 3: "s3"})
     )
 
-    sym_change['session'] = sym_change['session_change'].str.extract(r's(\d)_s\d').astype(int)
-
-    # --- Merge ---
+    # --- Merge: cycle change is long (patient, session); symptoms are wide (patient) ---
     df_merge = (
-        cycle_rate_change.merge(cycle_strength_change, on=['patient', 'session'])
-        .merge(sym_change[['patient', 'session', 'symptom_change']], on=['patient', 'session'])
+        cycle_rate_change
+        .merge(cycle_strength_change, on=["patient", "session"], how="inner")
+        .merge(sym_wide[["patient", "s1", "s2", "s3"]], on="patient", how="inner")
     )
 
-    df_cov = df[['patient'] + covariates].drop_duplicates()
-    df_merge = df_merge.merge(df_cov, on='patient', how='left').dropna()
+    df_cov = df[["patient"] + covariates].drop_duplicates()
+    df_merge = df_merge.merge(df_cov, on="patient", how="left").dropna()
 
-    # zscore and remove outlier
+    # Outlier removal (only cycle metrics, as you had)
     df_clean = df_merge[
-    (np.abs(zscore(df_merge['cycle_strength_change'], nan_policy='omit')) < 3) &
-     (np.abs(zscore(df_merge['cycle_rate_change'], nan_policy='omit')) < 3) &
-    (np.abs(zscore(df_merge['symptom_change'], nan_policy='omit')) < 3)
-    ]
+        (np.abs(zscore(df_merge["cycle_strength_change"], nan_policy="omit")) < 3) &
+        (np.abs(zscore(df_merge["cycle_rate_change"], nan_policy="omit")) < 3)
+    ].copy()
 
-    # Baseline to mid of treatment
-    df_sess1 = df_clean[df_clean['session'] == 1]
-    model = smf.ols("symptom_change ~ scale(cycle_strength_change) + scale(age) + gender + scale(years_with_depression) + group", data=df_sess1).fit()
-    print(model.summary())
+    # Build baseline + next symptom columns depending on session
+    df_clean["sym_base"] = np.where(df_clean["session"] == 1, df_clean["s1"], df_clean["s2"])
+    df_clean["sym_next"] = np.where(df_clean["session"] == 1, df_clean["s2"], df_clean["s3"])
 
-    # Mid to end of treatment
-    df_sess2 = df_clean[df_clean['session'] == 2]
-    model = smf.ols("symptom_change ~ scale(cycle_strength_change) + scale(age) + gender + scale(years_with_depression) + group", data=df_sess2).fit()
-    print(model.summary())
+    df_sess1 = df_clean[df_clean["session"] == 1].copy()
 
-    # cycle rate
+    model_s1 = smf.ols(
+        "sym_next ~ cycle_rate_change + cycle_strength_change + sym_base + age + C(gender)",
+        data=df_sess1
+    ).fit(cov_type='HC3')
 
-    # Baseline to mid of treatment
-    df_sess1 = df_clean[df_clean['session'] == 1]
-    model = smf.ols("symptom_change ~ scale(cycle_rate_change) + scale(age) + gender + scale(years_with_depression) + group", data=df_sess1).fit()
-    print(model.summary())
+    print(model_s1.summary())
 
-    # Mid to end of treatment
-    df_sess2 = df_clean[df_clean['session'] == 2]
-    model = smf.ols("symptom_change ~ scale(cycle_rate_change) + scale(age) + gender + scale(years_with_depression) + group", data=df_sess2).fit()
-    print(model.summary())
+    df_sess2 = df_clean[df_clean["session"] == 2].copy()
 
-    plot_symptom_change_correlation(df_clean, covariates)
+    model_s2 = smf.ols(
+        "sym_next ~ cycle_rate_change + cycle_strength_change + sym_base + age + C(gender)",
+        data=df_sess2
+    ).fit(cov_type='HC3')
+
+    print(model_s2.summary())
+
+    models = {1: model_s1, 2: model_s2}
+
+    plot_two_session_cycle_regression(
+        df_clean=df_clean,
+        models=models,
+        savepath=f"{output_dir}/symptom_change_cycle_rate_strength_pred"
+    )
 
     return
 
 
-def plot_symptom_change_correlation(df, covariates):
+def plot_two_session_cycle_regression(
+    df_clean,
+    models,  # dict: {1: model_for_session1, 2: model_for_session2}
+    metrics=("cycle_rate_change", "cycle_strength_change"),
+    figsize=(12, 10),
+    n_grid=200,
+    savepath=None,
+    y_label="Predicted next-session symptom severity",
+):
+    """
+    2x2 plot:
+      rows = session (1, 2) [i.e., 1->2 and 2->3]
+      cols = cycle metrics (rate, strength)
 
-    fig, (ax1, ax2) = plt.subplots(
-        1, 2,
-        figsize=(7.1, 4),
-        sharey=True,
-        gridspec_kw={"wspace": 0.4}
+    Each panel:
+      - scatter observed sym_next vs x_metric
+      - predicted mean + 95% CI from session-specific OLS model:
+          sym_next ~ rate_change + strength_change + sym_base + age + C(gender)
+      - hold the *other* metric + sym_base + covariates fixed at session-specific means/mode
+      - global x-axis per metric across both sessions
+    """
+    x1, x2 = metrics
+    dfp = df_clean.copy()
+    dfp["session"] = dfp["session"].astype(int)
+
+    # Ensure required columns exist
+    required = {x1, x2, "sym_next", "sym_base", "age", "gender", "session"}
+    missing = required - set(dfp.columns)
+    if missing:
+        raise ValueError(f"df_clean is missing columns required for plotting: {sorted(missing)}")
+
+    # global x-axis limits per metric (same across both sessions)
+    xlims = {
+        x1: (float(dfp[x1].min()), float(dfp[x1].max())),
+        x2: (float(dfp[x2].min()), float(dfp[x2].max())),
+    }
+
+    fig, axes = plt.subplots(
+        2, 2,
+        figsize=figsize,
+        constrained_layout=True,
+        sharex="col"
     )
 
-    # -------- Session 1 --------
-    df_sess1 = df_clean[df_clean['session'] == 1]
-    plot_partregress(
-        'symptom_change', 'cycle_rate_change',
-        covariates,
-        data=df_sess1,
-        obs_labels=False,
-        ax=ax1
-    )
-    ax1.set_xlabel("Δ HADS-D")
-    ax1.set_ylabel("Δ Cycle rate change")
-    ax1.text(
-        -0.15, 1.1, "a",
-        transform=ax1.transAxes,
-        fontsize=20,
-        fontweight="bold",
-        va="top"
-    )
-    ax1.set_title("")
+    # Columns
+    panels = [
+        (0, x1, x2, "Δ cycle rate (pre − post)"),
+        (1, x2, x1, "Δ cycle strength (pre − post)"),
+    ]
 
-    # -------- Session 2 --------
-    df_sess2 = df_clean[df_clean['session'] == 2]
-    plot_partregress(
-        'symptom_change', 'cycle_rate_change',
-        covariates,
-        data=df_sess2,
-        obs_labels=False,
-        ax=ax2
-    )
-    ax2.set_xlabel("Δ HADS-D")
-    ax2.set_ylabel("")  # avoid duplicate label
-    ax2.text(
-        -0.15, 1.1, "b",
-        transform=ax2.transAxes,
-        fontsize=20,
-        fontweight="bold",
-        va="top"
-    )
-    ax2.set_title("")
+    def plot_panel(ax, dsub, model, x_term, other_term, title=None):
+        # raw scatter: observed next-session symptoms
+        ax.scatter(
+            dsub[x_term].astype(float),
+            dsub["sym_next"].astype(float),
+            alpha=0.5,
+            s=18,
+            color="black"
+        )
 
-    # -------- Styling --------
-    for ax in (ax1, ax2):
-        for spine in ['top', 'right']:
-            ax.spines[spine].set_visible(False)
+        # prediction grid (global x for that metric)
+        x_min, x_max = xlims[x_term]
+        x_vals = np.linspace(x_min, x_max, n_grid)
 
-    plt.tight_layout()
-    plt.savefig(f'{output_dir}/symptom_change_cycle_rate.png', dpi=300, bbox_inches='tight')
-    plt.show()
+        # fixed predictors for marginal line (session-specific means/mode)
+        pred_df = pd.DataFrame({
+            x_term: x_vals,
+            other_term: float(dsub[other_term].astype(float).mean()),
+            "sym_base": float(dsub["sym_base"].astype(float).mean()),
+            "age": float(dsub["age"].astype(float).mean()),
+            "gender": dsub["gender"].mode().iloc[0],  # formula uses C(gender)
+        })
 
-    return 
+        pred = model.get_prediction(pred_df)
+        mean = pred.predicted_mean
+        ci = pred.conf_int(alpha=0.05)
+
+        ax.plot(x_vals, mean, color="black", linewidth=3)
+        ax.fill_between(x_vals, ci[:, 0], ci[:, 1], color="black", alpha=0.2)
+
+        ax.set_xlim(x_min, x_max)
+
+        if title is not None:
+            ax.set_title(title)
+
+        ax.set_xlabel("")  # set below per column
+        ax.set_ylabel(y_label)
+
+    # draw panels
+    for row, sess in enumerate([1, 2]):
+        if sess not in models:
+            raise ValueError(f"models is missing key {sess}. Expected models={{1:..., 2:...}}")
+
+        dsub = dfp[dfp["session"] == sess].copy()
+        m = models[sess]
+
+        for col, x_term, other_term, col_title in panels:
+            ax = axes[row, col]
+
+            title = col_title if row == 0 else None
+            plot_panel(ax, dsub, m, x_term, other_term, title=title)
+
+            ax.text(
+                0.02, 0.98,
+                f"Transition {sess} ({sess}→{sess+1})",
+                transform=ax.transAxes,
+                va="top", ha="left", color="black"
+            )
+
+            # x-label on bottom row only
+            if row == 1:
+                ax.set_xlabel(col_title)
+
+            # remove duplicate y-labels on right column
+            if col == 1:
+                ax.set_ylabel("")
+
+    # final styling (match your FO plot)
+    for ax in axes.flatten():
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_linewidth(1.5)
+        ax.spines["bottom"].set_linewidth(1.5)
+        ax.yaxis.set_ticks_position("left")
+        ax.xaxis.set_ticks_position("bottom")
+
+    if savepath:
+        fig.savefig(savepath + ".png", dpi=300, bbox_inches="tight")
+        fig.savefig(savepath + ".svg", bbox_inches="tight")
+
+    return fig, axes
 
 
-def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'gender', 'years_with_depression', 'group'], ):
+def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=('age', 'gender'), robust='HC3'):
     """
     Plot cycle dynamics.
     
@@ -384,13 +393,6 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'g
     - n_states: how many states
     -covariates: covariates for partial regression plot
     """
-
-    # ---- Colorblind-friendly palette ----
-    neg_color = '#56B4E9'  # blue
-    pos_color = '#E69F00'  # orange
-
-    # Custom diverging colormap: 
-    cmap = LinearSegmentedColormap.from_list('orange_blue', [neg_color, 'white', pos_color])
 
     # brain state colours for cycle
     brain_state_colors = sns.color_palette("tab20", n_colors=n_states)  
@@ -409,7 +411,7 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'g
     # 1 to 10
     state_labels = [str(i) for i in range(1, n_states + 1)]
     ax1 = fig.add_subplot(gs[0, 0])
-    ax1 = sns.heatmap(mean_asym, cmap=cmap, center=0, xticklabels=state_labels,
+    ax1 = sns.heatmap(mean_asym, cmap='viridis', center=0, xticklabels=state_labels,
                         yticklabels=state_labels, cbar=False)
 
     # Add stars for significant edges
@@ -455,7 +457,7 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'g
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
 
     cbar = plt.colorbar(
-        plt.cm.ScalarMappable(norm=norm, cmap=cmap),
+        plt.cm.ScalarMappable(norm=norm, cmap='viridis'),
         cax=cax,
         orientation='horizontal'
     )
@@ -494,42 +496,64 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=['age', 'g
     ax2.text(-0.15, 1.5, "b", transform=ax2.transAxes,
         fontsize=20, fontweight="bold", va="top")
 
-    # ---- Panel C: Partial regression Cycle strength ~ HADS ----
-    ax3 = fig.add_subplot(gs[1,0])
-    plot_partregress('cycle_strength', 'hads_dep_total', covariates, data=df, obs_labels=False, ax=ax3)
-    ax3.set_xlabel("baseline HADS-D")
-    ax3.set_ylabel("baseline cycle strength")
-    ax3.text(
-        -0.15, 1.15, "c",
-        transform=ax3.transAxes,
-        fontsize=20,
-        fontweight="bold",
-        va="top"
-    )
-    ax3.set_title("")
-
     
-    # ---- Panel D: Partial regression Cycle strength ~ HADS ----
-    ax4 = fig.add_subplot(gs[1,1])
-    plot_partregress('cycle_rate', 'hads_dep_total', covariates, data=df, obs_labels=False, ax=ax4)
-    ax4.set_xlabel("baseline HADS-D")
-    ax4.set_ylabel("baseline cycle rate")
-    ax4.text(
-        -0.15, 1.15, "d",
-        transform=ax4.transAxes,
-        fontsize=20,
-        fontweight="bold",
-        va="top"
+    # ------------------
+    # Panels C/D: Baseline regressions (prediction-style)
+    # ------------------
+    # If df is already baseline-only, great. If not, you can filter here:
+    # df = df.query("session == 1 and tms == 'pre'").copy()
+
+    # drop missing essentials
+    dfp = df.dropna(subset=["hads_dep_total", "cycle_strength", "cycle_rate", "age", "gender"]).copy()
+
+    # optional outlier removal (keep consistent with your other figures)
+    dfp = dfp[
+        (np.abs(zscore(dfp["cycle_strength"].astype(float), nan_policy="omit")) < 3) &
+        (np.abs(zscore(dfp["cycle_rate"].astype(float), nan_policy="omit")) < 3) &
+        (np.abs(zscore(dfp["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
+    ].copy()
+
+    m_strength = smf.ols("cycle_strength ~ hads_dep_total + age + C(gender)", data=dfp).fit(cov_type=robust)
+    m_rate     = smf.ols("cycle_rate ~ hads_dep_total + age + C(gender)", data=dfp).fit(cov_type=robust)
+
+    cov_pred = {
+        "age": float(dfp["age"].mean()),
+        "gender": dfp["gender"].mode().iloc[0],
+    }
+
+    ax3 = fig.add_subplot(gs[1, 0])
+    plot_reg_prediction_style(
+        ax=ax3,
+        model=m_strength,
+        data=dfp,
+        x_col="hads_dep_total",
+        y_col="cycle_strength",
+        covariate_cols_for_pred=cov_pred,
+        xlabel="baseline HADS-D",
+        ylabel="baseline cycle strength",
+        panel_letter="c",
     )
-    ax4.set_title("")
 
-    # Remove top/right spines for all axes
+    ax4 = fig.add_subplot(gs[1, 1])
+    plot_reg_prediction_style(
+        ax=ax4,
+        model=m_rate,
+        data=dfp,
+        x_col="hads_dep_total",
+        y_col="cycle_rate",
+        covariate_cols_for_pred=cov_pred,
+        xlabel="baseline HADS-D",
+        ylabel="baseline cycle rate",
+        panel_letter="d",
+    )
+
+    # Remove top/right spines for all axes (you already do this; harmless to keep)
     for ax in fig.axes:
-        for spine in ['top','right']:
-            ax.spines[spine].set_visible(False)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
 
-    plt.savefig(f'{output_dir}/baseline_cycle_params_{n_states}.png', dpi=300, bbox_inches='tight')
-    plt.savefig(f'{output_dir}/baseline_cycle_params_{n_states}.svg', dpi=300, bbox_inches='tight')
+    plt.savefig(f"{output_dir}/baseline_cycle_params_{n_states}.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"{output_dir}/baseline_cycle_params_{n_states}.svg", dpi=300, bbox_inches="tight")
     plt.show()
 
     return fig
@@ -558,7 +582,7 @@ def plot_cycle_axis(
     # Default color scheme
     # -------------------------------
     if color_scheme is None:
-        color_scheme = plt.cm.tab20(np.linspace(0, 1, len(ordering)))[:, :3]
+        color_scheme = sns.color_palette("tab20", n_colors=20)
 
     # -------------------------------
     # Prepare data
@@ -684,3 +708,48 @@ def calc_sign_asymmetry(output_dir, ses_idx, n_states):
     significant = p_vals < alpha_corr
 
     return asym, significant
+
+def plot_reg_prediction_style(
+    ax,
+    model,
+    data,
+    x_col,
+    y_col,
+    covariate_cols_for_pred,   # dict of fixed values
+    xlabel,
+    ylabel,
+    panel_letter=None,
+    n_grid=200,
+):
+    ax.scatter(data[x_col], data[y_col], alpha=0.5, s=18, color="black")
+
+    x_vals = np.linspace(float(data[x_col].min()), float(data[x_col].max()), n_grid)
+
+    pred_df = pd.DataFrame({x_col: x_vals})
+    for k, v in covariate_cols_for_pred.items():
+        pred_df[k] = v
+
+    pred = model.get_prediction(pred_df)
+    mean = pred.predicted_mean
+    ci = pred.conf_int(alpha=0.05)
+
+    ax.plot(x_vals, mean, color="black", linewidth=3)
+    ax.fill_between(x_vals, ci[:, 0], ci[:, 1], color="black", alpha=0.2)
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title("")
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.yaxis.set_ticks_position("left")
+    ax.xaxis.set_ticks_position("bottom")
+
+    if panel_letter is not None:
+        ax.text(
+            -0.15, 1.15, panel_letter,
+            transform=ax.transAxes,
+            fontsize=20,
+            fontweight="bold",
+            va="top"
+        )
