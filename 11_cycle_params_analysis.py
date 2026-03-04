@@ -53,28 +53,29 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
-n_states=10
+n_states_level1_level1 = 10
+n_states_level1_level2 = 4
 sess_idx=99 # 99 is all sessions
 
 # where are the symptoms stored
-csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
+csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states_level1}.csv")
 
-def load_cycle_parameters(n_states: int, sess_idx: int):
+def load_cycle_parameters(n_states_level1: int, sess_idx: int):
 
-    with open(output_dir / f"tinda_{sess_idx}_{n_states}.pkl", "rb") as f:
+    with open(output_dir / f"tinda_{sess_idx}_{n_states_level1}.pkl", "rb") as f:
         tinda = pickle.load(f)
 
     cycle_strength = tinda["cycle_strength"]
     asym = tinda["asym"]
 
-    fp = hmm_dir / "figures" / "cycles" / f"cycle_rate_{n_states}" / "run1" / f"cycle_duration_{sess_idx}_{n_states}.pkl"
+    fp = hmm_dir / "figures" / "cycles" / f"cycle_rate_{n_states_level1_level1}_{n_states_level1_level2}" / "run1" / f"cycle_duration_{sess_idx}_{n_states_level1}.pkl"
     with open(fp, "rb") as f:
         cycle_duration = pickle.load(f)
 
     return asym, cycle_strength, cycle_duration
 
 
-def add_cycle_parameters_to_df(n_states: int, sess_idx: int):
+def add_cycle_parameters_to_df(n_states_level1_level1: int, sess_idx: int):
 
     df = pd.read_csv(csv_path)
     print(f"Analyzing {df['patient'].nunique()} patients")
@@ -90,22 +91,22 @@ def add_cycle_parameters_to_df(n_states: int, sess_idx: int):
 
     df_state1 = df[df["state"] == 1].copy()
 
-    _, cycle_strength, cycle_duration = load_cycle_parameters(n_states=n_states, sess_idx=sess_idx)
+    _, cycle_strength, cycle_duration = load_cycle_parameters(n_states_level1=n_states_level1, sess_idx=sess_idx)
 
     cycle_mean = [np.mean(c) for c in cycle_duration]
     df_state1["cycle_strength"] = cycle_strength
     df_state1["cycle_duration"] = cycle_mean
     df_state1["cycle_rate"] = 1.0 / df_state1["cycle_duration"].astype(float)
 
-    out_csv = hmm_dir / f"df_includingcycles_{n_states}.csv"
+    out_csv = hmm_dir / f"df_includingcycles_{n_states_level1}.csv"
     df_state1.to_csv(out_csv, index=False)
     return df_state1
 
 
-def load_and_prep_data(n_states, exclude_repeater: bool = False):
+def load_and_prep_data(n_states_level1_level1, exclude_repeater: bool = False):
     
     # read df including cycle params
-    csv_path = Path(f'{hmm_dir}/df_includingcycles_{n_states}.csv')
+    csv_path = Path(f'{hmm_dir}/df_includingcycles_{n_states_level1}.csv')
 
     # read csv file containing clinical and hmm data
     df = pd.read_csv(csv_path)
@@ -137,9 +138,9 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
 
     return df_cycle
 
-def analyse_cycle_params(n_states: int, robust="HC3"):
+def analyse_cycle_params(n_states_level1: int, robust="HC3"):
 
-    df_cycle = load_and_prep_data(n_states)
+    df_cycle = load_and_prep_data(n_states_level1)
 
     df_cycle['cycle_strength'] = df_cycle['cycle_strength']*100
 
@@ -166,12 +167,12 @@ def analyse_cycle_params(n_states: int, robust="HC3"):
     print(m_rate.summary())
     print(m_strength.summary())
 
-    plot_cycle_params_baseline_hads(d0, ses_idx=sess_idx, n_states=n_states)
+    plot_cycle_params_baseline_hads(d0, ses_idx=sess_idx, n_states_level1=n_states_level1)
 
     return df_removeoutlier
 
 
-def plot_pc_vs_symptom_change(n_states: int,
+def plot_pc_vs_symptom_change(n_states_level1: int,
     symptom_col='hads_dep_total', 
     covariates=['age', 'gender']
 ):
@@ -383,33 +384,33 @@ def plot_two_session_cycle_regression(
     return fig, axes
 
 
-def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=('age', 'gender'), robust='HC3'):
+def plot_cycle_params_baseline_hads(df, ses_idx, n_states_level1, covariates=('age', 'gender'), robust='HC3'):
     """
     Plot cycle dynamics.
     
     Parameters:
     - df: dataframe with cycle features and demographics
     - ses_idx: which session (99 is all sessions concatenated)
-    - n_states: how many states
+    - n_states_level1: how many states
     -covariates: covariates for partial regression plot
     """
 
     # brain state colours for cycle
-    brain_state_colors = sns.color_palette("tab20", n_colors=n_states)  
-    rgb = np.array(brain_state_colors)        # shape: (n_states, 3)
+    brain_state_colors = sns.color_palette("tab20", n_colors=n_states_level1)  
+    rgb = np.array(brain_state_colors)        # shape: (n_states_level1, 3)
 
     # set up figure
     fig = plt.figure(figsize=(7.1, 8))
     gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.3, wspace=0.4)    
 
     # Panel A: FO Asymmetry Matrix
-    asym, significant = calc_sign_asymmetry(output_dir, ses_idx, n_states)
+    asym, significant = calc_sign_asymmetry(output_dir, ses_idx, n_states_level1)
 
     # Plot mean asymmetry (mean over sessions and patients)
     mean_asym = asym.mean(axis=-1) 
 
     # 1 to 10
-    state_labels = [str(i) for i in range(1, n_states + 1)]
+    state_labels = [str(i) for i in range(1, n_states_level1 + 1)]
     ax1 = fig.add_subplot(gs[0, 0])
     ax1 = sns.heatmap(mean_asym, cmap='viridis', center=0, xticklabels=state_labels,
                         yticklabels=state_labels, cbar=False)
@@ -476,7 +477,7 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=('age', 'g
     # Panel B: cycle
 
     # load tinda
-    with open(f"{output_dir}/tinda_{sess_idx}_{n_states}.pkl", "rb") as f:
+    with open(f"{output_dir}/tinda_{sess_idx}_{n_states_level1}.pkl", "rb") as f:
         tinda = pickle.load(f)
 
     best_sequence = tinda['best_sequence']
@@ -552,8 +553,8 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states, covariates=('age', 'g
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-    plt.savefig(f"{output_dir}/baseline_cycle_params_{n_states}.png", dpi=300, bbox_inches="tight")
-    plt.savefig(f"{output_dir}/baseline_cycle_params_{n_states}.svg", dpi=300, bbox_inches="tight")
+    plt.savefig(f"{output_dir}/baseline_cycle_params_{n_states_level1}.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"{output_dir}/baseline_cycle_params_{n_states_level1}.svg", dpi=300, bbox_inches="tight")
     plt.show()
 
     return fig
@@ -677,21 +678,21 @@ def plot_cycle_axis(
 
 
 
-def calc_sign_asymmetry(output_dir, ses_idx, n_states):
+def calc_sign_asymmetry(output_dir, ses_idx, n_states_level1):
 
     # load asymmetry matrix
-    asym = np.load(f'{output_dir}/fo_asymmetry_{ses_idx}_{n_states}.npy')
+    asym = np.load(f'{output_dir}/fo_asymmetry_{ses_idx}_{n_states_level1}.npy')
 
     # Prepare t-test outputs
-    t_vals = np.zeros((n_states, n_states))
-    p_vals = np.ones((n_states, n_states))
+    t_vals = np.zeros((n_states_level1, n_states_level1))
+    p_vals = np.ones((n_states_level1, n_states_level1))
 
     # List for Bonferroni count
     tests = []
 
     # Run t-tests
-    for i in range(n_states):
-        for j in range(n_states):
+    for i in range(n_states_level1):
+        for j in range(n_states_level1):
             if i == j:
                 continue
 
