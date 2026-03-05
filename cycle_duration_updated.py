@@ -387,7 +387,7 @@ if __name__ == "__main__":
     # Window length W:
     # Paper uses average lifetime in samples (≈64–68 ms at 250Hz => W≈16–17 samples)
     W = 16
-    K2 = 4
+    K2 = 10
     run = 0
 
     stc_reorder, data, fo = get_reordered_stc_and_windowed_data(
