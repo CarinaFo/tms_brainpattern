@@ -53,8 +53,8 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
-n_states_level1_level1 = 10
-n_states_level1_level2 = 4
+n_states_level1 = 10
+n_states_level2 = 10
 sess_idx=99 # 99 is all sessions
 
 # where are the symptoms stored
@@ -68,14 +68,14 @@ def load_cycle_parameters(n_states_level1: int, sess_idx: int):
     cycle_strength = tinda["cycle_strength"]
     asym = tinda["asym"]
 
-    fp = hmm_dir / "figures" / "cycles" / f"cycle_rate_{n_states_level1_level1}_{n_states_level1_level2}" / "run1" / f"cycle_duration_{sess_idx}_{n_states_level1}.pkl"
+    fp = hmm_dir / "figures" / "cycles" / f"cycle_rate_{n_states_level1}_{n_states_level2}" / "run1" / "cycle_duration.pkl"
     with open(fp, "rb") as f:
         cycle_duration = pickle.load(f)
 
     return asym, cycle_strength, cycle_duration
 
 
-def add_cycle_parameters_to_df(n_states_level1_level1: int, sess_idx: int):
+def add_cycle_parameters_to_df(n_states_level1: int, sess_idx: int):
 
     df = pd.read_csv(csv_path)
     print(f"Analyzing {df['patient'].nunique()} patients")
@@ -93,6 +93,7 @@ def add_cycle_parameters_to_df(n_states_level1_level1: int, sess_idx: int):
 
     _, cycle_strength, cycle_duration = load_cycle_parameters(n_states_level1=n_states_level1, sess_idx=sess_idx)
 
+    # @ Mats: do you average over cycle durations within individuals?
     cycle_mean = [np.mean(c) for c in cycle_duration]
     df_state1["cycle_strength"] = cycle_strength
     df_state1["cycle_duration"] = cycle_mean
@@ -100,10 +101,11 @@ def add_cycle_parameters_to_df(n_states_level1_level1: int, sess_idx: int):
 
     out_csv = hmm_dir / f"df_includingcycles_{n_states_level1}.csv"
     df_state1.to_csv(out_csv, index=False)
+
     return df_state1
 
 
-def load_and_prep_data(n_states_level1_level1, exclude_repeater: bool = False):
+def load_and_prep_data(n_states_level1, exclude_repeater: bool = False):
     
     # read df including cycle params
     csv_path = Path(f'{hmm_dir}/df_includingcycles_{n_states_level1}.csv')
@@ -137,6 +139,7 @@ def load_and_prep_data(n_states_level1_level1, exclude_repeater: bool = False):
     df_cycle = df.copy()
 
     return df_cycle
+
 
 def analyse_cycle_params(n_states_level1: int, robust="HC3"):
 
