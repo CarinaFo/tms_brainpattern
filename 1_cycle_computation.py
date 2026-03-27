@@ -6,7 +6,7 @@ Author: Carina Forster
 
 Last update: 15/01/2026
 
-Important: run in osld environment on linux
+Important: run in osld environment on linux or windows
 """
 import pickle
 import numpy as np
@@ -35,8 +35,17 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-# set working directory
-base_dir = Path('L:/')
+# -----------------------------
+# Paths
+# -----------------------------
+system = "windows"  # "linux" or "windows"
+
+if system == "linux":
+    base_dir = Path("/home/carinaf/LabData")
+elif system == "windows":
+    base_dir = Path("L:")
+else:
+    raise ValueError("system must be 'windows' or 'linux'")
 
 # where are the HMM summary stats stored
 hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
