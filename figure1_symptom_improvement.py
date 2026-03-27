@@ -5,11 +5,11 @@
 import os
 from pathlib import Path
 import pandas as pd
+import numpy as np
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import seaborn as sns
-import ptitprince as pt
 
 import statsmodels.formula.api as smf
 
@@ -33,12 +33,12 @@ plt.rcParams.update({
 # --------------------------------------------------
 home_dir = Path("L:/Lab_LucaC/Carina/")
 csv_path = Path(f"{home_dir}/canonical_hmm_finalsample/clinical_demo_combined_012026.csv")
-fig_dir = Path(f'{home_dir}/canonical_hmm_finalsample/figures')
+fig_dir = Path(f'{home_dir}/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered/figures')
 
 if not os.path.exists(fig_dir):
     os.makedirs(fig_dir)
 
-# plot figure 1 (symptom change, coefficients)
+#plot figure 1 (symptom change, coefficients)
 #plot_symptom_change_hads()
 #plot_regression_coeffs_demo()
 
@@ -169,10 +169,10 @@ def plot_symptom_change_hads(all_weeks: bool = False, outcome_variable: str = 'h
             x="session",
             y=outcome_variable,
             data=var_per_session,
-            estimator="median",
+            estimator="mean",
             errorbar="ci",
             marker="o",
-            linewidth=2
+            linewidth=4
         )
 
         plt.ylabel(f"HADS-D")
@@ -220,25 +220,31 @@ def plot_symptom_change_hads(all_weeks: bool = False, outcome_variable: str = 'h
         ordered=True
     )
 
-    # Plot style
     sns.set_theme(style="whitegrid")
-
     plt.figure(figsize=(7.1, 6))
+    ax = plt.gca()
 
-    ax = pt.RainCloud(
+    # --- Full violin ---
+    sns.violinplot(
+        data=var_per_session,
         x="session",
         y=outcome_variable,
-        data=var_per_session,
         color=base_color,
-        bw=.25,
-        width_viol=.6,
-        move=.25,
-        alpha=0.9,
-        orient="v",
-        point_size=0
+        inner=None,        # remove default box/median
+        cut=0,
+        alpha=0.5,
+        linewidth=0,
+        ax=ax
     )
 
-    # --- Individual trajectories ---
+    # --- Convert to HALF violin (left side only) ---
+    for i, artist in enumerate(ax.collections):
+        path = artist.get_paths()[0]
+        vertices = path.vertices
+        mean_x = vertices[:, 0].mean()
+        vertices[:, 0] = np.minimum(vertices[:, 0], mean_x)  # keep left half
+
+    # --- Single-subject trajectories (light orange) ---
     session_order = var_per_session["session"].cat.categories
     x_positions = {s: i for i, s in enumerate(session_order)}
 
@@ -247,24 +253,40 @@ def plot_symptom_change_hads(all_weeks: bool = False, outcome_variable: str = 'h
         ax.plot(
             df_p["session"].map(x_positions),
             df_p[outcome_variable],
-            color="grey",
-            alpha=0.2,
-            linewidth=1,
-            zorder=0
+            color="orange",
+            alpha=0.1,
+            linewidth=1.5,
+            zorder=1
         )
 
-    # Styling
+    # --- Median markers and IQR ---
+    mean_vals = []  # to store median for each session
+    for i, session in enumerate(session_order):
+        vals = var_per_session[var_per_session["session"] == session][outcome_variable]
+        mean = np.mean(vals)
+        mean_vals.append(mean)
+
+    # --- Dark-orange line connecting medians ---
+    ax.plot(
+        range(len(session_order)),
+        mean_vals,
+        color="orange",
+        linewidth=3,
+        marker='D',
+        zorder=4
+    )
+
     ax.yaxis.grid(True, linestyle="--", linewidth=0.7, alpha=0.6)
-    ax.set_xlabel("Treatment timepoint", labelpad=10)
+    ax.set_xlabel("Treatment time", labelpad=10)
     ax.set_ylabel("HADS-D", labelpad=10)
 
     ax.set_yticks([0, 10, 20])
     ax.set_yticklabels([0, 10, 20])
     ax.set_ylim(-1, 22)
 
-    ax.set_xticklabels(
-        [s.replace("week ", "Week ").title() for s in session_order]
-    )
+    # Correct x-ticks
+    ax.set_xticks(range(len(session_order)))
+    ax.set_xticklabels(["Pre", "Mid", "Post"])
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
