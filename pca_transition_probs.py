@@ -11,6 +11,7 @@ Workflow:
 """
 
 from pathlib import Path
+import joblib
 
 import numpy as np
 import pandas as pd
@@ -105,7 +106,15 @@ def run_pca_on_transitions(
         X_in = scaler.fit_transform(X_off)
 
     pca = PCA(n_components=None)
+
     scores = pca.fit_transform(X_in)      # (n_samples, n_components)
+
+    # save the PCA output to disk
+    save_pca_results(
+        pca,
+        filepath=f'{hmm_dir}/pca_results_{n_states}states.joblib'
+    )
+
     loadings = pca.components_            # (n_components, n_features_offdiag)
 
     cumvar = np.cumsum(pca.explained_variance_ratio_) * 100
@@ -202,7 +211,7 @@ def add_pca_to_clinical(
     # clinical vars are duplicated across state rows -> keep one row per patient/session/tms
     # choosing state==1 is a simple way if all clinical vars are state-invariant
     if "state" in df_clin.columns:
-        df_clin_uniq = df_clin[df_clin["state"] == 1].copy()
+        df_clin_uniq = df_clin[df_clin["state"] == 2].copy()
     else:
         df_clin_uniq = df_clin.copy()
 
@@ -247,8 +256,8 @@ def baseline_pc_vs_hads(df: pd.DataFrame, robust: str = "HC3"):
         (np.abs(zscore(d["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
     ].copy()
 
-    m_pc1 = smf.ols("PC1 ~ hads_dep_total + age + C(gender)", data=d).fit(cov_type=robust)
-    m_pc2 = smf.ols("PC2 ~ hads_dep_total + age + C(gender)", data=d).fit(cov_type=robust)
+    m_pc1 = smf.ols("PC1 ~ hads_dep_total + fo + age + C(gender)", data=d).fit(cov_type=robust)
+    m_pc2 = smf.ols("PC2 ~ hads_dep_total + fo + age + C(gender)", data=d).fit(cov_type=robust)
 
     print(m_pc1.summary())
     print(m_pc2.summary())
@@ -758,30 +767,38 @@ def make_main_figure(
     }
 
 
+def save_pca_results(pca_out, filepath):
+    joblib.dump(pca_out, filepath)
+    print(f"Saved PCA results to {filepath}")
+
 if __name__ == "__main__":
-    n_states = 10
+
     n_sessions = 6
+    all_states = [10]
 
-    df_all, pca_out = add_pca_to_clinical(hmm_dir, n_states=n_states, n_sessions=n_sessions)
+    for n_states in all_states:
 
-    # Supplementary: transitions + variance explained
-    make_supplementary_figure(
-        transitions=pca_out["transitions"],
-        pca=pca_out["pca"],
-        savepath_base=str(fig_dir / f"SUPP_transitions_variance_states{n_states}"),
-        x_max=30,  # increase/decrease if you want
-    )
+        df_all, pca_out = add_pca_to_clinical(hmm_dir, n_states=n_states, n_sessions=n_sessions)
 
-    # Main: loadings + baseline regressions + symptom improvement predictions
-    make_main_figure(
-        df_all=df_all,
-        pca_out=pca_out,
-        n_states=n_states,
-        symptom_col="hads_dep_total",
-        robust="HC3",
-        savepath_base=str(fig_dir / f"MAIN_pca_loadings_baseline_improvement_states{n_states}"),
-    )
+        # Supplementary: transitions + variance explained
+        make_supplementary_figure(
+            transitions=pca_out["transitions"],
+            pca=pca_out["pca"],
+            savepath_base=str(fig_dir / f"SUPP_transitions_variance_states{n_states}"),
+            x_max=30,  # increase/decrease if you want
+        )
 
-    # (Optional) still print model summaries in console:
-    d_baseline, m_pc1, m_pc2 = baseline_pc_vs_hads(df_all, robust="HC3")
-    pc_change_predicts_next_symptoms(df_all, symptom_col="hads_dep_total", covariates=["age", "gender"], robust="HC3")
+        # Main: loadings + baseline regressions + symptom improvement predictions
+        make_main_figure(
+            df_all=df_all,
+            pca_out=pca_out,
+            n_states=n_states,
+            symptom_col="hads_dep_total",
+            robust="HC3",
+            savepath_base=str(fig_dir / f"MAIN_pca_loadings_baseline_improvement_states{n_states}"),
+        )
+
+
+        # (Optional) still print model summaries in console:
+        d_baseline, m_pc1, m_pc2 = baseline_pc_vs_hads(df_all, robust="HC3")
+        pc_change_predicts_next_symptoms(df_all, symptom_col="hads_dep_total", covariates=["age", "gender"], robust="HC3")
