@@ -46,10 +46,6 @@ else:
 hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered')
 fig_dir = Path(f"{hmm_dir}/figures")
 
-# which state models do we have saved?
-# this is used to make sure results are robust and do not depend on N_states
-all_states=[6, 8, 10, 12]
-
 
 def prepare_delta_fo(
     n_states: int,
@@ -491,3 +487,20 @@ def compare_interaction_model(long_df):
     print(f"p-value: {p_value:.4f}")
 
     return model_no_int, model_int, lr_stat, df_diff, p_value
+
+
+if __name__ == "__main__":
+
+    # which state models do we have saved?
+    # this is used to make sure results are robust and do not depend on N_states
+    all_states=[6, 8, 10]
+
+    n_sessions = 6
+
+    for n_states in all_states:
+        print(f"{n_states}")
+        long_df = prepare_delta_fo(n_states)
+        models = fit_two_session_models(long_df)
+        print(models[1].summary())
+        print(models[2].summary())
+        plot_two_session_regression(long_df, models, savepath=f'{fig_dir}/fig3_{n_states}.svg')
