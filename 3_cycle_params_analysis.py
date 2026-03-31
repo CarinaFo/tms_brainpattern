@@ -5,7 +5,15 @@ runs regression models to predict baseline symptoms and symptom improvement.
 
 Author: Carina Forster
 
-Last update: 03/03/2026
+Disclaimer: The logic of this code and all steps have been implemented by the author.
+            Generative AI (CHAT GPT 5.4 Business) was used to format the script and add
+            docstrings to the main functions. 
+            A first code-review to find obvious bugs and inconsistencies was
+            done using Codex.
+
+            The author takes full responsibility for the code and the scientific results.
+
+Last update: 31/03/2026
 """
 import pandas as pd
 import numpy as np
@@ -35,7 +43,7 @@ plt.rcParams.update({
     "legend.fontsize": 12,
 })
 
-# run in base python (3.12)
+# run in base python (3.10)
 system='windows'
 
 if system == 'linux':
@@ -53,98 +61,28 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
-n_states_level1 = 10
-n_states_level2 = 10
-sess_idx=99 # 99 is all sessions
+# first levevl hmm states are set to be equal to second level hmm states as discussed with Mats van Es
+n_states_level1 = [6, 8, 10]
+n_states_level2 = n_states_level1 # same state resolution on both HMM levels
 
-# where are the symptoms stored
-csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states_level1}.csv")
+sess_idx=99 # 99: all sessions concatenated
 
-def load_cycle_parameters(n_states_level1: int, sess_idx: int):
-
-    with open(output_dir / f"tinda_{sess_idx}_{n_states_level1}.pkl", "rb") as f:
-        tinda = pickle.load(f)
-
-    cycle_strength = tinda["cycle_strength"]
-    asym = tinda["asym"]
-
-    fp = hmm_dir / "figures" / "cycles" / f"cycle_rate_{n_states_level1}_{n_states_level2}" / "run1" / "cycle_duration.pkl"
-    with open(fp, "rb") as f:
-        cycle_duration = pickle.load(f)
-
-    return asym, cycle_strength, cycle_duration
-
-
-def add_cycle_parameters_to_df(n_states_level1: int, sess_idx: int):
-
-    df = pd.read_csv(csv_path)
-    print(f"Analyzing {df['patient'].nunique()} patients")
-
-    # Only do this if the raw CSV is zero-indexed
-    df["state"] = df["state"] + 1
-
-    for col in ["age", "gender", "responder", "group"]:
-        df[col] = df.groupby("patient")[col].transform("first")
-
-    for col in ["patient", "session", "tms", "state", "group", "responder", "gender"]:
-        df[col] = df[col].astype("category", errors="ignore")
-
-    df_state1 = df[df["state"] == 1].copy()
-
-    _, cycle_strength, cycle_duration = load_cycle_parameters(n_states_level1=n_states_level1, sess_idx=sess_idx)
-
-    # @ Mats: do you average over cycle durations within individuals?
-    cycle_mean = [np.mean(c) for c in cycle_duration]
-    df_state1["cycle_strength"] = cycle_strength
-    df_state1["cycle_duration"] = cycle_mean
-    df_state1["cycle_rate"] = 1.0 / df_state1["cycle_duration"].astype(float)
-
-    out_csv = hmm_dir / f"df_includingcycles_{n_states_level1}.csv"
-    df_state1.to_csv(out_csv, index=False)
-
-    return df_state1
-
-
-def load_and_prep_data(n_states_level1, exclude_repeater: bool = False):
-    
-    # read df including cycle params
-    csv_path = Path(f'{hmm_dir}/df_includingcycles_{n_states_level1}.csv')
-
-    # read csv file containing clinical and hmm data
-    df = pd.read_csv(csv_path)
-
-    unique_ids = pd.unique(pd.Series(df['patient']))
-    
-    # exclude patients that repeated TMS treatment?
-    if exclude_repeater:
-        repeater_ids = [i for i in unique_ids if "R" in str(i)]
-        print(f'{len(repeater_ids)} patients repeated the treatment')
-        repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
-        df = df[~df["patient"].str.contains("R")]
-        drop_indices = repeater_positions
-        np.save(f'{hmm_dir}/dropped_indices.npy', np.array(drop_indices))
-
-    print(f"Analyzing {df['patient'].nunique()} patients")
-
-    df["state"] = df["state"] + 1  # we want states starting from 1
-
-    # fill in demographic variables
-    for col in ["age", "gender", 'responder', 'group', 'years_with_depression']:
-        df[col] = df.groupby("patient")[col].transform("first")
-
-    # transform to categorical
-    for col in ["patient", "session", "tms", "state", 'responder', 'group', 'gender']:
-        df[col] = df[col].astype("category", errors="ignore")
-
-    df_cycle = df.copy()
-
-    return df_cycle
+# TODO: add main to script
+# for n_states in n_states_level1:
+    #print(f"{n_states}")
+    # run this once to get a dataframe with cycle parameters added to clinical data
+    # df_state2 = add_cycle_parameters_to_df(n_states, 99)
+    # baseline analysis only
+    # analyse_cycle_params(n_states)
+    # baseline and symptom change
+    # plot_pc_vs_symptom_change(n_states)
 
 
 def analyse_cycle_params(n_states_level1: int, robust="HC3"):
 
     df_cycle = load_and_prep_data(n_states_level1)
 
+    # better for linear modelling
     df_cycle['cycle_strength'] = df_cycle['cycle_strength']*100
 
     df_clean = (
@@ -170,6 +108,19 @@ def analyse_cycle_params(n_states_level1: int, robust="HC3"):
     print(m_rate.summary())
     print(m_strength.summary())
 
+    # control analysis: include FO as regressor (anterior DMN)
+    m_rate_control = smf.ols("np.log(cycle_rate) ~ hads_dep_total + fo + age + C(gender)", data=d0).fit(cov_type=robust)
+    m_strength_control = smf.ols("cycle_strength ~ hads_dep_total + fo + age + C(gender)", data=d0).fit(cov_type=robust)
+
+    print(m_rate_control.summary())
+    print(m_strength_control.summary())
+    # multicollinearity warnings
+
+    # check correlations
+    np.corrcoef(d0['cycle_rate'], d0['cycle_strength'])
+    np.corrcoef(d0['cycle_rate'], d0['fo'])
+    np.corrcoef(d0['cycle_strength'], d0['fo'])
+    
     plot_cycle_params_baseline_hads(d0, ses_idx=sess_idx, n_states_level1=n_states_level1)
 
     return df_removeoutlier
@@ -177,15 +128,15 @@ def analyse_cycle_params(n_states_level1: int, robust="HC3"):
 
 def plot_pc_vs_symptom_change(n_states_level1: int,
     symptom_col='hads_dep_total', 
-    covariates=['age', 'gender']
+    covariates=['age', 'gender'] # control analysis: include FO as regressor
 ):
     """
     Test whether TMS-induced PC1/PC2 changes predict symptom change (ΔHADS-D)
-    across session intervals (2, 3), controlling for covariates.
-    Produces separate regression plots for PC1 and PC2.
+    across session intervals (1, 2), controlling for covariates.
+    Outputs separate regression plots for PC1 and PC2.
     """
 
-    df = analyse_cycle_params(10)
+    df = analyse_cycle_params(n_states_level1)
 
     # --- Data prep ---
     df["session"] = df["session"].astype(int)
@@ -473,8 +424,6 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states_level1, covariates=('a
     cbar.ax.yaxis.set_major_formatter(
         mticker.FormatStrFormatter('%.2f')
     )
-
-    # Title above colorbar
     cbar.ax.set_title('FO asymmetry', pad=8)
 
     # Panel B: cycle
@@ -500,12 +449,7 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states_level1, covariates=('a
     ax2.text(-0.15, 1.5, "b", transform=ax2.transAxes,
         fontsize=20, fontweight="bold", va="top")
 
-    
-    # ------------------
-    # Panels C/D: Baseline regressions (prediction-style)
-    # ------------------
-    # If df is already baseline-only, great. If not, you can filter here:
-    # df = df.query("session == 1 and tms == 'pre'").copy()
+    # baseline regressions
 
     # drop missing essentials
     dfp = df.dropna(subset=["hads_dep_total", "cycle_strength", "cycle_rate", "age", "gender"]).copy()
@@ -571,26 +515,16 @@ def plot_cycle_axis(
     color_scheme=None,
     ax=None,
 ):
-    import numpy as np
-    import matplotlib.pyplot as plt
 
-    # -------------------------------
-    # Handle figure / axis
-    # -------------------------------
     if ax is None:
         fig, ax = plt.subplots(figsize=(4, 4))
     else:
         fig = ax.figure
 
-    # -------------------------------
-    # Default color scheme
-    # -------------------------------
+    # make sure colors match first level HMM states
     if color_scheme is None:
         color_scheme = sns.color_palette("tab20", n_colors=20)
 
-    # -------------------------------
-    # Prepare data
-    # -------------------------------
     K = len(ordering)
 
     if fo_density.ndim == 5:
@@ -605,18 +539,14 @@ def plot_cycle_axis(
     edges = edges[ordering][:, ordering]
     mean_direction = mean_direction[ordering][:, ordering]
 
-    # -------------------------------
-    # Correct circular coordinates
-    # -------------------------------
+
     theta = np.linspace(0, -2 * np.pi, K, endpoint=False)
     theta += np.pi / 2  # start at 12 o'clock
 
     radius = 1
     coords = radius * np.column_stack((np.cos(theta), np.sin(theta)))
 
-    # -------------------------------
-    # Plot nodes
-    # -------------------------------
+
     for i in range(K):
         ax.scatter(
             coords[i, 0],
@@ -635,9 +565,6 @@ def plot_cycle_axis(
             zorder=4,
         )
 
-    # -------------------------------
-    # Plot arrows
-    # -------------------------------
     for i in range(K):
         for j in range(K):
             if edges[i, j]:
@@ -669,16 +596,12 @@ def plot_cycle_axis(
                     zorder=2,
                 )
 
-    # -------------------------------
-    # Final formatting (THIS MATTERS)
-    # -------------------------------
     ax.set_aspect("equal")
     ax.set_xlim(-1.2, 1.2)
     ax.set_ylim(-1.2, 1.2)
     ax.axis("off")
 
     return fig, ax
-
 
 
 def calc_sign_asymmetry(output_dir, ses_idx, n_states_level1):
@@ -706,12 +629,13 @@ def calc_sign_asymmetry(output_dir, ses_idx, n_states_level1):
             p_vals[i, j] = p
             tests.append((i, j, p))
 
-    # Bonferroni correction
+    # Bonferroni correction (as in van Es, Higgins et al.)
     n_tests = len(tests)
     alpha_corr = 0.05 / n_tests
     significant = p_vals < alpha_corr
 
     return asym, significant
+
 
 def plot_reg_prediction_style(
     ax,
@@ -757,3 +681,81 @@ def plot_reg_prediction_style(
             fontweight="bold",
             va="top"
         )
+
+
+def load_cycle_parameters(n_states_level1: int, n_states_level2: int, sess_idx: int):
+
+    with open(output_dir / f"tinda_{sess_idx}_{n_states_level1}.pkl", "rb") as f:
+        tinda = pickle.load(f)
+
+    cycle_strength = tinda["cycle_strength"]
+
+    fp = hmm_dir / "figures" / "cycles" / f"cycle_rate_{n_states_level1}_{n_states_level2}" / "run1" / "cycle_duration.pkl"
+    with open(fp, "rb") as f:
+        cycle_duration = pickle.load(f)
+
+    return cycle_strength, cycle_duration
+
+
+def add_cycle_parameters_to_df(n_states_level1: int, sess_idx: int):
+
+    # load the clinical data including HMM parameters
+    csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states_level1}.csv")
+
+    df = pd.read_csv(csv_path)
+
+    print(f"Analyzing {df['patient'].nunique()} patients") 
+
+    # states should be 1 to 10
+    df["state"] = df["state"] + 1
+
+    # a bit of a clean up
+    for col in ["age", "gender", "responder", "group"]:
+        df[col] = df.groupby("patient")[col].transform("first")
+
+    for col in ["patient", "session", "tms", "state", "group", "responder", "gender"]:
+        df[col] = df[col].astype("category", errors="ignore")
+
+    # select only state 2 (anterior DMN state)
+    df_state1 = df[df["state"] == 2].copy()
+
+    cycle_strength, cycle_duration = load_cycle_parameters(n_states_level1, n_states_level1, sess_idx)
+
+    # @ Mats: do you average over cycle durations within individuals?
+    cycle_mean = [np.mean(c) for c in cycle_duration]
+    df_state1["cycle_strength"] = cycle_strength
+    df_state1["cycle_duration"] = cycle_mean
+    df_state1["cycle_rate"] = 1.0 / df_state1["cycle_duration"].astype(float)
+
+    out_csv = hmm_dir / f"df_includingcycles_{n_states_level1}.csv"
+    df_state1.to_csv(out_csv, index=False)
+
+    return df_state1
+
+
+def load_and_prep_data(n_states_level1, exclude_repeater: bool = False):
+    
+    # read df including cycle params
+    csv_path = Path(f'{hmm_dir}/df_includingcycles_{n_states_level1}.csv')
+
+    # read csv file containing clinical and hmm data
+    df = pd.read_csv(csv_path)
+
+    unique_ids = pd.unique(pd.Series(df['patient']))
+    
+    # exclude patients that repeated TMS treatment?
+    if exclude_repeater:
+        repeater_ids = [i for i in unique_ids if "R" in str(i)]
+        print(f'{len(repeater_ids)} patients repeated the treatment')
+        repeater_positions = [list(unique_ids).index(i) for i in repeater_ids]
+        df = df[~df["patient"].str.contains("R")]
+        drop_indices = repeater_positions
+        np.save(f'{hmm_dir}/dropped_indices.npy', np.array(drop_indices))
+
+    print(f"Analyzing {df['patient'].nunique()} patients")
+
+    # transform to categorical
+    for col in ["patient", "session", "tms", "state", 'responder', 'group', 'gender']:
+        df[col] = df[col].astype("category")
+
+    return df
