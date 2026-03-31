@@ -1,20 +1,33 @@
 """
-Compute cycle duration (paper-faithful implementation).
+Compute cycle duration (van Es, Higgins et al., 2025, Nat. Neuro.)
 
 Loads TINDA output (best cycle sequence) and state time courses,
 creates windowed features, then fits a second-level Poisson HMM with
 sequential Markov dynamics to estimate cycle duration/rate.
 
 Authors: Mats van Es, Carina Forster
-Last update: 03/03/2026
+Last update: 31/03/2026
 
-Important: run in osld environment on linux
+Disclaimer: The logic of this code and all steps have been implemented by the author.
+            Generative AI (CHAT GPT 5.4 Business) was used to format the script and add
+            docstrings to the main functions. 
+            A first code-review to find obvious bugs and inconsistencies was
+            done using Codex.
+
+            The author takes full responsibility for the code and the scientific results.
+
+
+Important: run in osld environment on linux (NEUROSERV2)
 """
 
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import pickle
 import numpy as np
-from copy import deepcopy
 from pathlib import Path
 
 from osl_dynamics.data import Data
@@ -23,13 +36,9 @@ from osl_dynamics.models.hmm_poi import Config, Model
 
 print(f"we have {os.cpu_count()} CPUs")
 
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-
-# Paths
+# Paths defined for NeuroServ2 (linux)
 base_dir = Path("/home/carinaf/LabData")
+
 hmm_dir = Path(
     f"{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered"
 )
@@ -37,11 +46,41 @@ output_dir = Path(f"{hmm_dir}/figures/cycles")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # Configs
-K1 = 10          
-n_ses = 6
-n_subs = 70
-ses_all = 99
-fs = 250
+n_ses = 6 # sessions
+n_subs = 70 # patients
+ses_all = 99 # all sessions concatenated
+fs = 250 # sampling rate
+
+# Cycle configs
+
+# Window length W:
+# van Es et al., use average lifetime in samples (≈64–68 ms at 250Hz => W≈16–17 samples)
+
+K1 = 12
+K2 = K1 # as discussed with van Es we use the same state resolution in both HMMs
+W = 16
+run = 0
+
+# run this per state resolution
+# TODO: add to main 
+
+#stc_reorder, data, fo = get_reordered_stc_and_windowed_data(
+#    W=W, ses=ses_all, nses=n_ses, K1=K1
+#)
+
+#cycle_duration, free_energy, run_used = run_second_level_hmm(
+#    data=data,
+#    fo=fo,
+#    K1=K1,
+#    K2=K2,
+#    fs=fs,
+#    W=W,
+#    run=run,
+#    out_root=output_dir / f"cycle_rate_{K1}_{K2}",
+#)
+
+#print(f"Done. run={run_used+1}, free_energy={free_energy}")
+
 
 def make_windowed_features(stc_reordered: list[np.ndarray], W: int, K1: int):
     """
@@ -112,10 +151,11 @@ def get_reordered_stc_and_windowed_data(
 
     td = _load_pickle(tinda_path)
 
-    # Hard classification for FO + lifetimes
-    # (FO is invariant to permutation, but lifetimes etc. behave better w/ hard labels.)
+    # Binarize state time course
     stc_onoff = modes.argmax_time_courses(stc)
     fo = modes.fractional_occupancies(stc_onoff)
+
+    # life time to determine window length (decided to use 16 as in van Es, Higgins)
     # mean_lt = np.mean(modes.mean_lifetimes(stc_onoff))
 
     best_seq = np.asarray(td["best_sequence"])
@@ -165,17 +205,17 @@ def init_log_rates(K1: int, K2: int, seq: np.ndarray, fo_mean: np.ndarray, W: in
 
 
 def make_circular_trans_mat(K2: int):
-    """High self-transition + forward ring (author code)."""
+    """High self-transition + forward ring"""
     P = 0.99 * np.eye(K2) + 0.01 * np.diag(np.ones(K2 - 1), 1)
     P[-1, 0] = 0.01
     return P
 
 
-def run_second_level_hmm_author(
+def run_second_level_hmm(
     data: Data,
     fo: np.ndarray,
     K1: int,
-    K2: int = 4,
+    K2: int,
     fs: int = fs,
     W: int = 16,
     run: int = 0,
@@ -253,7 +293,7 @@ def run_second_level_hmm_author(
     stc_2ndlevel = get_viterbi_path_safe(model, data)
     _save_pickle(stc_2ndlevel, rundir / "stc_2ndlevel.pkl")
 
-    # cycle duration (author logic)
+    # cycle duration
     cycle_duration = []
     for i_stc in stc_2ndlevel:
         i_stc = np.asarray(i_stc)
@@ -273,16 +313,16 @@ def run_second_level_hmm_author(
 
     return cycle_duration, free_energy, run
 
-# Helper functions
+# TODO: put into config.py before publishing
+
+# Helper functions 
 def _load_pickle(path: Path):
     with open(path, "rb") as f:
         return pickle.load(f)
 
-
 def _save_pickle(obj, path: Path):
     with open(path, "wb") as f:
         pickle.dump(obj, f)
-
 
 def one_hot_np(indices, depth, dtype=np.float32):
     """indices: (n,) ints in [0, depth-1] -> (n, depth) one-hot."""
@@ -381,28 +421,3 @@ def get_viterbi_path_safe(model, dataset, concatenate=False, one_hot=True, one_h
         viterbi_out = np.concatenate(viterbi_out, axis=0)
 
     return viterbi_out
-
-
-if __name__ == "__main__":
-    # Window length W:
-    # Paper uses average lifetime in samples (≈64–68 ms at 250Hz => W≈16–17 samples)
-    W = 16
-    K2 = 10
-    run = 0
-
-    stc_reorder, data, fo = get_reordered_stc_and_windowed_data(
-        W=W, ses=ses_all, nses=n_ses, K1=K1
-    )
-
-    cycle_duration, free_energy, run_used = run_second_level_hmm_author(
-        data=data,
-        fo=fo,
-        K1=K1,
-        K2=K2,
-        fs=fs,
-        W=W,
-        run=run,
-        out_root=output_dir / f"cycle_rate_{K1}_{K2}",
-    )
-
-    print(f"Done. run={run_used+1}, free_energy={free_energy}")
