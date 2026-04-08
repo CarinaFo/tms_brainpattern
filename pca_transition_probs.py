@@ -684,8 +684,8 @@ def make_main_figure(
     m_s2 = smf.ols("s3 ~ PC2_change + baseline_symptom + age + C(gender)", data=d2).fit(cov_type=robust)
 
     # ---------- Layout ----------
-    fig = plt.figure(figsize=(11, 10))
-    gs = gridspec.GridSpec(3, 2, hspace=0.65, wspace=0.5)
+    fig = plt.figure(figsize=(10, 14))  # narrower + taller
+    gs = gridspec.GridSpec(3, 2, hspace=0.8, wspace=0.35)
 
     axA = fig.add_subplot(gs[0, 0])
     axB = fig.add_subplot(gs[0, 1])
