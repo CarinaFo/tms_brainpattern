@@ -29,7 +29,7 @@ parcellation_file = "fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii
 
 # New order for states
 #order = [3, 5, 7, 0, 1, 6, 9, 8, 4, 2] # Chet reordered based on power
-n_states = [12]
+n_states = [10]
 n_sessions = 1
 
 for state in n_states:
@@ -147,8 +147,9 @@ for state in n_states:
                 parcellation_file=parcellation_file,
                 subtract_mean=True,
                 mean_weights=gfo,
-                #plot_kwargs={'hemispheres': ['left'], 'views': ['lateral'], 'cbar_tick_format': '%.2f'},
-                #'cmap': 'coolwarm'}, #'PuOr'
+                plot_kwargs={
+                        #"cmap": "coolwarm",
+                },
                 filename=f"{save_dir_plots}/pow_{ses}_.svg",
                 component=0
             )
@@ -159,8 +160,9 @@ for state in n_states:
                 parcellation_file=parcellation_file,
                 subtract_mean=True,
                 mean_weights=gfo,
-                #plot_kwargs={'hemispheres': ['left'], 'views': ['lateral'], 'cbar_tick_format': '%.2f'},
-                #'cmap': 'coolwarm'}, #'PuOr'
+                plot_kwargs={
+                    #"cmap": "coolwarm"
+                },
                 filename=f"{save_dir_plots}/pow_{ses}_.png",
                 component=0
             )
@@ -187,7 +189,7 @@ for state in n_states:
             # Subtract reference and threshold
             gfo = np.average(fo, axis=0, weights=w)
             c -= np.average(c, axis=0, weights=gfo)
-            c = connectivity.threshold(c, percentile=97, absolute_value=True)
+            c = connectivity.threshold(c, percentile=95, absolute_value=True)
             # round for plotting
             c_rounded = c.astype(float).round(3)
 
@@ -195,7 +197,7 @@ for state in n_states:
             connectivity.save(
                 c_rounded,
                 parcellation_file=parcellation_file,
-                plot_kwargs={"display_mode": "z", "annotate": False, 'edge_cmap': 'coolwarm', 'colorbar': False},  
+                plot_kwargs={"display_mode": "z", "annotate": False, 'edge_cmap': 'coolwarm', 'colorbar': False}, 
                 filename=f"{save_dir_plots}/coh_{ses}_.svg"
             )
 
