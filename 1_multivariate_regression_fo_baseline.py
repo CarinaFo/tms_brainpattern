@@ -9,10 +9,12 @@ Workflow:
 5) Multiple-comparisons correction across fitted states (optional)
 6) Plot: FO distribution, forest plot, regression prediction-style panels, predicted-vs-observed
 """
+# Disclaimer: Code was prettified using AI
+
+# The author still takes full responsibility for the validity of any logic and results
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Tuple, Optional
 
@@ -62,9 +64,6 @@ def inv_logit(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
 
-# -----------------------------
-# Data IO
-# -----------------------------
 def load_and_prep_data(hmm_dir: Path, n_states: int, exclude_repeater: bool = False) -> pd.DataFrame:
     """
     Load and preprocess HMM demo questionnaire data.
@@ -109,20 +108,6 @@ def get_baseline_df(df: pd.DataFrame) -> pd.DataFrame:
 
     baseline = d[(d_sess == "1") & (d_tms == "pre")].copy()
     return baseline
-
-
-# -----------------------------
-# Modeling
-# -----------------------------
-@dataclass
-class StateModelResult:
-    state: int
-    n: int
-    beta: float
-    se: float
-    ci_low: float
-    ci_high: float
-    p: float
 
 
 def fit_statewise_baseline_models(
@@ -366,9 +351,6 @@ def plot_baseline_figure(
     return fig, axes
 
 
-# -----------------------------
-# Runner
-# -----------------------------
 def run_baseline_fo_pipeline(
     hmm_dir: Path,
     fig_dir: Path,
