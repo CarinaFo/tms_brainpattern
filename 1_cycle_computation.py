@@ -257,11 +257,13 @@ def test_sign_cycle(ses_idx: int, n_states: int):
     # one-sided: observed > null
     p = (np.sum(group_null >= group_observed) + 1) / (len(group_null) + 1)
 
-    plt.hist(group_null, bins=30)
+    plt.hist(group_null)
     plt.axvline(group_observed, color="red", linewidth=2, label="observed")
     plt.legend()
     plt.savefig(f"{output_dir}/permutations_cycle_strength_group_{ses_idx}_{n_states}.svg")
     plt.show()
+
+    print(p)
 
     return p
 
