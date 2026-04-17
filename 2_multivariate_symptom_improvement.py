@@ -1,5 +1,5 @@
-"""Run regressions on all states with FO as dependent variable
-# Do FO changes predict changes in depressive symptoms?
+"""Run regressions on HMM states with HADS-D as dependent variable (depressive symptom severity)
+# Does FO change predict changes in depressive symptoms?
 
 Author: Carina Forster
 
@@ -258,48 +258,43 @@ def plot_two_session_regression(
 def load_and_prep_data(n_states, exclude_repeater: bool = False):
     """
     Load and preprocess HMM demo questionnaire data.
-
-    This function reads the HMM demo CSV file for the specified number
-    of states, optionally excludes repeater patients, adjusts state
-    indexing to start from 1, fills demographic variables per patient,
-    and converts selected columns to categorical type.
-
-    Parameters
-    ----------
-    n_states : int
-        Number of HMM states used to construct the file name.
-    exclude_repeater : bool, optional
-        If True, excludes patients whose ID contains "R".
-        Default is False.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Preprocessed dataframe with:
-        - State labels starting from 1
-        - Demographic variables filled per patient
-        - Selected columns converted to categorical dtype
+    Drops patients with missing baseline HADS-D (session 1, pre).
     """
-    
     csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
-
-    # read csv file containing clinical and hmm data
     df = pd.read_csv(csv_path)
 
-    if exclude_repeater:
-        df = df[~df["patient"].str.contains("R")]
+    if exclude_repeater and "patient" in df.columns:
+        df = df[~df["patient"].astype(str).str.contains("R")]
+
+    if "state" in df.columns:
+        df["state"] = df["state"] + 1
+
+    for col in ["age", "gender", "responder", "group", "years_with_depression"]:
+        if col in df.columns:
+            df[col] = df.groupby("patient")[col].transform("first")
+
+    # Drop patients with no baseline HADS-D
+    required = {"session", "tms", "hads_dep_total", "patient"}
+    if required.issubset(df.columns):
+        baseline = df[
+            (df["session"].astype(str) == "1") &
+            (df["tms"].astype(str) == "pre")
+        ].copy()
+
+        missing_baseline = baseline.loc[
+            baseline["hads_dep_total"].isna(), "patient"
+        ].astype(str).unique()
+
+        if len(missing_baseline) > 0:
+            print("\nDropping patients with no baseline HADS-D before treatment:")
+            print(", ".join(sorted(missing_baseline)))
+            df = df[~df["patient"].astype(str).isin(missing_baseline)].copy()
 
     print(f"Analyzing {df['patient'].nunique()} patients")
 
-    df["state"] = df["state"] + 1  # we want states starting from 1
-
-    # fill in demographic variables
-    for col in ["age", "gender", "responder", "group", "years_with_depression"]:
-        df[col] = df.groupby("patient")[col].transform("first")
-
-    # transform to categorical
     for col in ["patient", "session", "tms", "state", "responder", "group", "gender"]:
-        df[col] = df[col].astype("category", errors="ignore")
+        if col in df.columns:
+            df[col] = df[col].astype("category", errors="ignore")
 
     return df
 
@@ -493,7 +488,7 @@ if __name__ == "__main__":
 
     # which state models do we have saved?
     # this is used to make sure results are robust and do not depend on N_states
-    all_states=[6, 8, 10]
+    all_states=[6, 8, 10, 12]
 
     n_sessions = 6
 
