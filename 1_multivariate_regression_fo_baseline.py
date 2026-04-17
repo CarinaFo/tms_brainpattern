@@ -71,7 +71,7 @@ def load_and_prep_data(hmm_dir: Path, n_states: int, exclude_repeater: bool = Fa
     - fills demographics per patient
     - casts common columns to categorical
     """
-    csv_path = hmm_dir / f"hmm_demo_quest_{n_states}.csv"
+    csv_path = hmm_dir / f"hmm_demo_hads_{n_states}.csv"
     df = pd.read_csv(csv_path)
 
     if exclude_repeater and "patient" in df.columns:
@@ -97,16 +97,34 @@ def load_and_prep_data(hmm_dir: Path, n_states: int, exclude_repeater: bool = Fa
 
 
 def get_baseline_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Baseline subset: session 1, pre-TMS."""
-    # avoid .query() because categories can behave oddly if duplicates exist
+    """Baseline subset: visit 1, pre-TMS. Drops patients without HADS-D."""
+
     d = df.copy()
-    d_sess = d["session"].astype(str) if "session" in d.columns else None
-    d_tms = d["tms"].astype(str) if "tms" in d.columns else None
 
-    if d_sess is None or d_tms is None:
-        raise ValueError("Expected 'session' and 'tms' columns in dataframe.")
+    # use visit-based logic (new pipeline)
+    if "session" not in d.columns or "tms" not in d.columns:
+        raise ValueError("Expected 'session' and 'tms' columns.")
 
-    baseline = d[(d_sess == "1") & (d_tms == "pre")].copy()
+    d_visit = d["session"].astype(str)
+    d_tms = d["tms"].astype(str)
+
+    baseline = d[(d_visit == "1") & (d_tms == "pre")].copy()
+
+    # ---------------------------------------------------
+    # 🚨 Drop patients with missing baseline HADS-D
+    # ---------------------------------------------------
+    missing_mask = baseline["hads_dep_total"].isna()
+
+    if missing_mask.any():
+        missing_patients = baseline.loc[missing_mask, "patient"].unique()
+
+        print("\n🚨 Dropping patients with NO baseline HADS-D:")
+        print(", ".join(map(str, missing_patients)))
+        print(f"Total dropped: {len(missing_patients)}\n")
+
+        # remove those patients entirely
+        baseline = baseline[~baseline["patient"].isin(missing_patients)].copy()
+
     return baseline
 
 
@@ -161,6 +179,70 @@ def fit_statewise_baseline_models(
 
     summary_df = pd.DataFrame(rows).sort_values("state").reset_index(drop=True)
     return models, summary_df
+
+
+def fit_state_interaction_model(
+    df_baseline: pd.DataFrame,
+    states: Tuple[int, int] = (1, 2),
+    cluster_by_patient: bool = True,
+):
+    """
+    Test whether the HADS-D effect on FO differs between two states.
+
+    Model:
+        fo_logit ~ hads_dep_total * C(state_num) + age + C(gender)
+
+    Parameters
+    ----------
+    df_baseline : pd.DataFrame
+        Baseline dataframe (session 1, pre-TMS).
+    states : tuple of int
+        Two states to compare.
+    cluster_by_patient : bool
+        If True, use cluster-robust SE by patient because each patient contributes
+        one observation per state.
+
+    Returns
+    -------
+    model : statsmodels result
+        Fitted interaction model.
+    dsub : pd.DataFrame
+        Data used for the model.
+    """
+    required = ["patient", "state", "fo", "hads_dep_total", "age", "gender"]
+    missing = [c for c in required if c not in df_baseline.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    s1, s2 = states
+    dsub = df_baseline.copy()
+    dsub["state_num"] = pd.to_numeric(dsub["state"].astype(str), errors="coerce")
+    dsub = dsub[dsub["state_num"].isin([s1, s2])].copy()
+    dsub["state_num"] = dsub["state_num"].astype(int)
+    dsub["fo_logit"] = logit_transform_fo(dsub["fo"])
+
+    # set first state as reference
+    dsub["state_num"] = pd.Categorical(dsub["state_num"], categories=[s1, s2], ordered=True)
+
+    formula = "fo_logit ~ hads_dep_total * C(state_num) + age + C(gender)"
+
+    if cluster_by_patient:
+        model = smf.ols(formula, data=dsub).fit(
+            cov_type="cluster",
+            cov_kwds={"groups": dsub["patient"]}
+        )
+    else:
+        model = smf.ols(formula, data=dsub).fit(cov_type="HC3")
+
+    m_mixed = smf.mixedlm(
+        "fo_logit ~ hads_dep_total * C(state_num) + age + C(gender)",
+        data=dsub,
+        groups=dsub["patient"]
+    ).fit()
+
+    print(m_mixed.summary())
+
+    return model, dsub
 
 
 def apply_pvalue_correction(summary_df: pd.DataFrame, correction: Optional[str], alpha: float = 0.05) -> pd.DataFrame:
@@ -362,7 +444,7 @@ def run_baseline_fo_pipeline(
     min_n: int = 10,
 ):
     df = load_and_prep_data(hmm_dir, n_states=n_states)
-    dfb = get_baseline_df(df)
+    dfb = get_baseline_df(df) # 700 rows, 70 patients, 10 states
     models, summary_df = fit_statewise_baseline_models(dfb, robust=robust, min_n=min_n)
     summary_df = apply_pvalue_correction(summary_df, correction=correction, alpha=alpha)
 
