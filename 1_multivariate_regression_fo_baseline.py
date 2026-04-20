@@ -16,7 +16,7 @@ Workflow:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Iterable, Tuple, Optional
+from typing import Dict, Tuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -79,6 +79,15 @@ def load_and_prep_data(hmm_dir: Path, n_states: int, exclude_repeater: bool = Fa
 
     print(f"Analyzing {df['patient'].nunique()} patients (n_states={n_states})")
 
+    df['eeg_date'] = pd.to_datetime(df['visit_anchor_datetime'])
+    df['matched_hads_date'] = pd.to_datetime(df['matched_hads_date'])
+
+    # add delta days between eeg and hads
+    df['diff_days'] = (df['eeg_date'] - df['matched_hads_date']).dt.days
+
+    # baseline HADS score for this patient is wrong
+    #df.loc[(df['patient'] == '144R') & (df['session'] == 1), 'hads_dep_total'] = 8
+
     # states start at 1
     if "state" in df.columns:
         df["state"] = df["state"] + 1
@@ -122,7 +131,7 @@ def get_baseline_df(df: pd.DataFrame) -> pd.DataFrame:
         print(", ".join(map(str, missing_patients)))
         print(f"Total dropped: {len(missing_patients)}\n")
 
-        # remove those patients entirely
+        #remove those patients entirely
         baseline = baseline[~baseline["patient"].isin(missing_patients)].copy()
 
     return baseline
@@ -234,11 +243,12 @@ def fit_state_interaction_model(
     else:
         model = smf.ols(formula, data=dsub).fit(cov_type="HC3")
 
+    print(model.summary())
     m_mixed = smf.mixedlm(
         "fo_logit ~ hads_dep_total * C(state_num) + age + C(gender)",
         data=dsub,
         groups=dsub["patient"]
-    ).fit()
+    ).fit(method='powell')
 
     print(m_mixed.summary())
 
@@ -470,7 +480,7 @@ if __name__ == "__main__":
     fig_dir.mkdir(parents=True, exist_ok=True)
 
     # test robustness across different state solutions
-    state_solutions: Iterable[int] = [10]
+    state_solutions = [10]
 
     for ns in state_solutions:
         summary, models = run_baseline_fo_pipeline(
@@ -482,5 +492,4 @@ if __name__ == "__main__":
             robust="HC3",
             min_n=10,
         )
-        print("\n--- Summary (first rows) ---")
-        print(summary.head())
+        print(summary)
