@@ -2,12 +2,17 @@ import glob
 import re
 import pandas as pd
 from pathlib import Path
-import os
 
-# set working directory
-os.chdir(Path("/home/carinaf"))
 
-base_dir = os.getcwd()
+# Utilities
+# -----------------------------
+def get_base_dir(system: str) -> Path:
+    if system == "linux":
+        return Path("/home/carinaf/LabData")
+    if system == "windows":
+        return Path("L:")
+    raise ValueError("system must be 'windows' or 'linux'")
+
 
 def get_latest_file(directory, pattern):
     files = sorted(
@@ -62,11 +67,11 @@ def extract_scale(
     return df
 
 
-def combine_dataframes(base_dir: str):
+def combine_dataframes():
 
+    base_dir = get_base_dir('windows')
     clinical_dir = Path(
         base_dir,
-        "LabData",
         "Lab_LucaC",
         "A_QNC_Databank",
         "Participants_Clinical_TMS_Data"
@@ -164,6 +169,6 @@ def combine_dataframes(base_dir: str):
     cols = ['patient'] + [c for c in df_combined.columns if c != 'patient']
     df_combined = df_combined[cols]
 
-    df_combined.to_csv(f'{base_dir}/clinical_demo_combined_012026.csv')
+    df_combined.to_csv(f'{base_dir}/Lab_LucaC/Carina/clinical_demo_combined_210426.csv')
 
     return df_combined
