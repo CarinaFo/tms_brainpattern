@@ -258,7 +258,7 @@ def crop_data_for_hmm():
             print(f"Skipping {id}: cropped file already exists.")
             continue
 
-        # Skip subject IDs 180, 183, and all IDs >= 186 (different paradigm)
+        # Skip subject IDs 180, 183, and all IDs >= 186 (eyes closed only paradimg)
         if subj_id in ['180', '183'] or subj_id >= '186':
 
             id = f'{subj_id}_{str(session)}'
