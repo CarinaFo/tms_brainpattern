@@ -260,7 +260,7 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
     Load and preprocess HMM demo questionnaire data.
     Drops patients with missing baseline HADS-D (session 1, pre).
     """
-    csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states}.csv")
+    csv_path = Path(f"{hmm_dir}/hmm_demo_hads2404_{n_states}.csv")
     df = pd.read_csv(csv_path)
 
     if exclude_repeater and "patient" in df.columns:
