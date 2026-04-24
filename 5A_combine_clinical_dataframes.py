@@ -67,26 +67,39 @@ def extract_scale(
     return df
 
 
-def combine_dataframes():
+def combine_dataframes(manual_updated: bool = True):
 
     base_dir = get_base_dir('windows')
-    clinical_dir = Path(
+
+    if manual_updated:
+        clinical_dir = Path(
+        base_dir,
+        "Lab_LucaC",
+        "Carina",
+        "canonical_hmm_finalsample"
+        )
+
+        latest_file = get_latest_file(
+            clinical_dir,
+            "*MDD Anonymised QNC Clinical Data_carinassample.xlsx"
+        )
+    else:
+        clinical_dir = Path(
         base_dir,
         "Lab_LucaC",
         "A_QNC_Databank",
         "Participants_Clinical_TMS_Data"
-    )
+        )
 
-    latest_file = get_latest_file(
-        clinical_dir,
-        "*MDD Anonymised QNC Clinical Data.xlsx"
-    )
+        latest_file = get_latest_file(
+            clinical_dir,
+            "*MDD Anonymised QNC Clinical Data.xlsx"
+        )
 
     if latest_file is None:
         raise FileNotFoundError("No clinical Excel file found")
 
     print("Latest file:", latest_file)
-
     xls = pd.ExcelFile(latest_file)
 
     # -------- HADS --------
@@ -169,6 +182,6 @@ def combine_dataframes():
     cols = ['patient'] + [c for c in df_combined.columns if c != 'patient']
     df_combined = df_combined[cols]
 
-    df_combined.to_csv(f'{base_dir}/Lab_LucaC/Carina/clinical_demo_combined_210426.csv')
+    df_combined.to_csv(f'{base_dir}/Lab_LucaC/Carina/clinical_demo_combined_240426.csv')
 
     return df_combined
