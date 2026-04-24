@@ -64,18 +64,38 @@ def inv_logit(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
 
-def load_and_prep_data(hmm_dir: Path, n_states: int, exclude_repeater: bool = False) -> pd.DataFrame:
+def load_and_prep_data(hmm_dir: Path, n_states: int, exclude_repeater: bool = False,
+                        exclude_new_protocol: bool = False) -> pd.DataFrame:
     """
     Load and preprocess HMM demo questionnaire data.
     - shifts state labels to start at 1
     - fills demographics per patient
     - casts common columns to categorical
     """
-    csv_path = hmm_dir / f"hmm_demo_hads_{n_states}.csv"
+    csv_path = Path(f'{hmm_dir}/hmm_demo_hads2404_{n_states}.csv')
     df = pd.read_csv(csv_path)
 
     if exclude_repeater and "patient" in df.columns:
         df = df[~df["patient"].astype(str).str.contains("R")]
+
+    # control analyis: check if protocol changes results
+    patient_num = df['patient'].astype(str).str.extract(r'(\d+)').astype(int)[0]
+
+    base_ids = ['180', '183']
+
+    df['protocol'] = np.where(
+                        df['patient'].astype(str).isin(base_ids) | (patient_num >= 186),
+            2,
+            1
+        )
+    
+    if exclude_new_protocol:
+        df = df[
+            ~(
+                df['patient'].isin(base_ids) |
+                (patient_num >= 186)
+            )
+        ]
 
     print(f"Analyzing {df['patient'].nunique()} patients (n_states={n_states})")
 
@@ -85,8 +105,7 @@ def load_and_prep_data(hmm_dir: Path, n_states: int, exclude_repeater: bool = Fa
     # add delta days between eeg and hads
     df['diff_days'] = (df['eeg_date'] - df['matched_hads_date']).dt.days
 
-    # baseline HADS score for this patient is wrong
-    #df.loc[(df['patient'] == '144R') & (df['session'] == 1), 'hads_dep_total'] = 8
+    df = add_recording_length(df)
 
     # states start at 1
     if "state" in df.columns:
@@ -149,7 +168,7 @@ def fit_statewise_baseline_models(
       models: dict[state] -> fitted model
       summary_df: state-wise table (beta, SE, CI, p, n)
     """
-    required = ["state", "fo", "hads_dep_total", "age", "gender"]
+    required = ["state", "fo", "hads_dep_total", "age", "gender", 'eeg_recording_length']
     missing = [c for c in required if c not in df_baseline.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
@@ -170,7 +189,7 @@ def fit_statewise_baseline_models(
         if len(ds) < min_n:
             continue
 
-        m = smf.ols("fo_logit ~ hads_dep_total + age + C(gender)", data=ds).fit(cov_type=robust)
+        m = smf.ols("fo_logit ~ hads_dep_total + age + C(gender) + eeg_recording_length", data=ds).fit(cov_type=robust)
         models[st] = m
 
         term = "hads_dep_total"
@@ -218,7 +237,7 @@ def fit_state_interaction_model(
     dsub : pd.DataFrame
         Data used for the model.
     """
-    required = ["patient", "state", "fo", "hads_dep_total", "age", "gender"]
+    required = ["patient", "state", "fo", "hads_dep_total", "age", "gender", 'eeg_recording_length']
     missing = [c for c in required if c not in df_baseline.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
@@ -233,7 +252,7 @@ def fit_state_interaction_model(
     # set first state as reference
     dsub["state_num"] = pd.Categorical(dsub["state_num"], categories=[s1, s2], ordered=True)
 
-    formula = "fo_logit ~ hads_dep_total * C(state_num) + age + C(gender)"
+    formula = "fo_logit ~ hads_dep_total * C(state_num) + age + C(gender) + eeg_recording_length"
 
     if cluster_by_patient:
         model = smf.ols(formula, data=dsub).fit(
@@ -293,6 +312,7 @@ def plot_baseline_figure(
     state_for_panels: Tuple[int, int] = (1, 2),
     figsize=(12, 12),
     out_base: Optional[Path] = None,
+    plot_preds: bool = False
 ):
     """
     Creates 3x2 figure:
@@ -410,37 +430,74 @@ def plot_baseline_figure(
     plot_state_reg(axC, int(state_for_panels[0]))
     plot_state_reg(axD, int(state_for_panels[1]))
 
-    # ---- Panel E/F: predicted vs observed FO ----
-    def plot_pred_vs_obs(ax, st: int):
-        ds = d[d["state_num"] == st].copy()
-        if st not in models or len(ds) < 10:
-            ax.text(0.5, 0.5, f"State {st}\n(n<10)", ha="center", va="center", transform=ax.transAxes)
-            ax.set_axis_off()
-            return
+    if plot_preds:
+        # ---- Panel E/F: predicted vs observed FO ----
+        def plot_pred_vs_obs(ax, st: int):
+            ds = d[d["state_num"] == st].copy()
+            if st not in models or len(ds) < 10:
+                ax.text(0.5, 0.5, f"State {st}\n(n<10)", ha="center", va="center", transform=ax.transAxes)
+                ax.set_axis_off()
+                return
 
-        m = models[st]
-        pred = m.get_prediction(ds).predicted_mean
-        pred_fo = inv_logit(pred)
-        obs_fo = ds["fo"].astype(float).values
+            m = models[st]
+            pred = m.get_prediction(ds).predicted_mean
+            pred_fo = inv_logit(pred)
+            obs_fo = ds["fo"].astype(float).values
 
-        ax.scatter(pred_fo, obs_fo, alpha=0.6, s=18, color="black")
+            ax.scatter(pred_fo, obs_fo, alpha=0.6, s=18, color="black")
 
-        lim_low = 0.0
-        lim_high = float(np.nanmax([pred_fo.max(), obs_fo.max()]))
-        ax.plot([lim_low, lim_high], [lim_low, lim_high], linestyle="--", color="black", linewidth=1)
+            lim_low = 0.0
+            lim_high = float(np.nanmax([pred_fo.max(), obs_fo.max()]))
+            ax.plot([lim_low, lim_high], [lim_low, lim_high], linestyle="--", color="black", linewidth=1)
 
-        ax.set_xlabel("Predicted FO")
-        ax.set_ylabel("Observed FO")
-        _strip_spines(ax)
+            ax.set_xlabel("Predicted FO")
+            ax.set_ylabel("Observed FO")
+            _strip_spines(ax)
 
-    plot_pred_vs_obs(axE, int(state_for_panels[0]))
-    plot_pred_vs_obs(axF, int(state_for_panels[1]))
+        plot_pred_vs_obs(axE, int(state_for_panels[0]))
+        plot_pred_vs_obs(axF, int(state_for_panels[1]))
 
     if out_base is not None:
         fig.savefig(str(out_base) + ".svg")
         fig.savefig(str(out_base) + ".png", dpi=300)
 
     return fig, axes
+
+
+def add_recording_length(df):
+    # merge EEG recording length
+    eeg_rec_length = pd.read_csv(eeg_length_path)
+
+    df["patient"] = df["patient"].astype(str)
+    eeg_rec_length["patient"] = eeg_rec_length["patient"].astype(str)
+
+    df["session"] = pd.to_numeric(df["session"], errors="coerce").astype("Int64")
+    eeg_rec_length["session"] = pd.to_numeric(eeg_rec_length["session"], errors="coerce").astype("Int64")
+    df["tms"] = df["tms"].astype(str).str.lower()
+
+    # map EEG recording index (0..5) to clinical session (1..3) and tms (pre/post)
+    eeg_rec_length["session_clinical"] = (eeg_rec_length["session"] // 2) + 1
+    eeg_rec_length["tms"] = np.where(eeg_rec_length["session"] % 2 == 0, "pre", "post")
+
+    # keep only relevant columns
+    eeg_rec_length = eeg_rec_length[["patient", "session_clinical", "tms", "eeg_recording_length"]]
+    eeg_rec_length = eeg_rec_length.drop_duplicates(subset=["patient", "session_clinical", "tms"])
+
+    # rename for merge
+    eeg_rec_length = eeg_rec_length.rename(columns={"session_clinical": "session"})
+    
+    # merge on patient + session + tms
+    df = df.merge(
+        eeg_rec_length,
+        on=["patient", "session", "tms"],
+        how="left"
+    )
+
+    df["eeg_recording_length"] = (
+    df["eeg_recording_length"] - df["eeg_recording_length"].mean()
+        ) / df["eeg_recording_length"].std()
+
+    return df
 
 
 def run_baseline_fo_pipeline(
@@ -478,6 +535,10 @@ if __name__ == "__main__":
     hmm_dir = base_dir / "Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered"
     fig_dir = hmm_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
+
+    eeg_length_path = Path(
+    f"{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/"
+    "prepared_data_giles_05Hz_1Hzfiltereddata/eeg_recording_length.csv")
 
     # test robustness across different state solutions
     state_solutions = [10]
