@@ -44,8 +44,8 @@ def match_hads_to_eeg_visits():
     # -----------------------------
     # 1) Load latest clinical file
     # -----------------------------
-    clinical_dir = f'{base_dir}/Lab_LucaC/A_QNC_Databank/Participants_Clinical_TMS_Data'
-    pattern = f"{clinical_dir}/*MDD Anonymised QNC Clinical Data.xlsx"
+    clinical_dir = f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample'
+    pattern = f"{clinical_dir}/*MDD Anonymised QNC Clinical Data_carinassample.xlsx"
     excel_files = glob.glob(pattern)
     excel_files = sorted(excel_files, key=lambda x: Path(x).stat().st_mtime, reverse=True)
     latest_excel = excel_files[0] if excel_files else None
@@ -263,7 +263,7 @@ def save_summary_stats_df(n_sessions: int = 6, n_states: int = None):
     # 2) Load combined clinical/demographic dataframe
     # ---------------------------------------------------------
     df = pd.read_csv(
-        f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/clinical_demo_combined_012026.csv'
+        f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/clinical_demo_combined_240426.csv'
     )
 
     # standardize columns just in case
@@ -385,9 +385,6 @@ def save_summary_stats_df(n_sessions: int = 6, n_states: int = None):
     # ---------------------------------------------------------
     # 8) Derived variables
     # ---------------------------------------------------------
-    if 'age' in df_eeg.columns and 'age of symptom onset' in df_eeg.columns:
-        df_eeg['years_with_depression'] = df_eeg['age'] - df_eeg['age of symptom onset']
-
     if 'tms outcome' in df_eeg.columns:
         df_eeg['responder'] = np.where(
             df_eeg['tms outcome'].isin([1, 2]), 0,
@@ -441,7 +438,7 @@ def save_summary_stats_df(n_sessions: int = 6, n_states: int = None):
     # ---------------------------------------------------------
     # 10) Save outputs
     # ---------------------------------------------------------
-    df_eeg.to_csv(Path(f"{hmm_dir}/hmm_demo_hads_{n_states}.csv"), index=False)
+    df_eeg.to_csv(Path(f"{hmm_dir}/hmm_demo_hads2404_{n_states}.csv"), index=False)
 
     if not future_hads_df.empty:
         future_hads_df.to_csv(
