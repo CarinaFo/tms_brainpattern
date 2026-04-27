@@ -138,6 +138,12 @@ def get_baseline_df(df: pd.DataFrame) -> pd.DataFrame:
 
     baseline = d[(d_visit == "1") & (d_tms == "pre")].copy()
 
+    # Find patient with lowest HADS score
+    #lowest_patient = baseline.loc[baseline['hads_dep_total'].idxmin(), 'patient']
+
+    # Exclude that patient
+    #baseline = baseline[baseline['patient'] != lowest_patient]
+        
     # ---------------------------------------------------
     # 🚨 Drop patients with missing baseline HADS-D
     # ---------------------------------------------------
