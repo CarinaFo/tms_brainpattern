@@ -2,19 +2,24 @@
 
 Forster et al., 2026
 
-Code to analyse 64-channel, resting state (eyes closed) data and clinical data obtained from 70 participants that
-underwent repetitive, personalised TMS treatment (20-30 sessions) to the left DLPF for treatment-resistant major depressive disorder.
+Code to analyse 64-channel, resting state (eyes closed) EEG data and clinical data obtained from 70 participants that
+underwent repetitive, personalised TMS treatment (20-30 sessions) to the left DLPF for treatment-resistant major depressive disorder at an outpatient clinic.
 
-Each participant has 6 EEG recordings, collected during treatment at 3 separate timepoints (baseline, mid treatment, post treatment).
+Each participant has 6 EEG recordings, collected during treatment at 3 separate timepoints (Session 1, Session 11, Session 20).
 
-At each timepoint EEG resting state data (roughly 4 minutes) was collected immediately before and after a TMS session.
+At each timepoint EEG resting state data (roughly 4 minutes) was collected immediately before and after a single TMS session.
 
 EEG data was preprocessed and projected into source space using custom scripts that utilise MNE-Python and osl-ephys.
 
-Clean, source reconstructed EEG data was then applied to a canonical 10 state Hidden Markov Model.
+A canonical 10 state TDE-HMM (Gohil et al., 2026, HMM trained on CAM-CAN dataset) was then applied to the parcellated EEG data (39 parcels)
+and a state time course was inferred for each participant and each session.
 
-Fractional occupancy, transition probabilites and cycle parameters were extracted from the HMM and related to baseline
-symptom severity (HADS-D) and acute TMS effects on those parameters were used to predict symptom improvement from baseline to
-mid-treatment and from mid-treatment to end of treatment.
+Fractional occupancy, transition probabilites and cycle parameters were extracted from the 10 state HMM and related to baseline
+symptom severity (sefl reported HADS-D) and acute TMS effects on those parameters were used to predict symptom improvement from Session 1 to
+Session 11 and from Session 11 to Session 20.
 
-The manuscript is currently prepared for publication.
+Baseline regression matched the HADS-D score before the first EEG session, all other HADS-D scores were matched based on proximity (date) to the EEG session, preferably pre TMS. 
+
+The manuscript is under preparation for publication.
+
+Please contact Carina Forster or Luca Cocchi from QIMRB for data sharing options.
