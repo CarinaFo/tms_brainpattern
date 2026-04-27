@@ -72,7 +72,7 @@ def load_and_prep_data(hmm_dir: Path, n_states: int, exclude_repeater: bool = Fa
     - fills demographics per patient
     - casts common columns to categorical
     """
-    csv_path = Path(f'{hmm_dir}/hmm_demo_hads2404_{n_states}.csv')
+    csv_path = Path(f'{hmm_dir}/hmm_demo_hads2704_{n_states}.csv')
     df = pd.read_csv(csv_path)
 
     if exclude_repeater and "patient" in df.columns:
@@ -189,7 +189,7 @@ def fit_statewise_baseline_models(
         if len(ds) < min_n:
             continue
 
-        m = smf.ols("fo_logit ~ hads_dep_total + age + C(gender) + eeg_recording_length", data=ds).fit(cov_type=robust)
+        m = smf.ols("fo_logit ~ hads_dep_total + age + C(gender)", data=ds).fit(cov_type=robust)
         models[st] = m
 
         term = "hads_dep_total"
@@ -252,7 +252,7 @@ def fit_state_interaction_model(
     # set first state as reference
     dsub["state_num"] = pd.Categorical(dsub["state_num"], categories=[s1, s2], ordered=True)
 
-    formula = "fo_logit ~ hads_dep_total * C(state_num) + age + C(gender) + eeg_recording_length"
+    formula = "fo_logit ~ hads_dep_total * C(state_num) + age + C(gender)"
 
     if cluster_by_patient:
         model = smf.ols(formula, data=dsub).fit(

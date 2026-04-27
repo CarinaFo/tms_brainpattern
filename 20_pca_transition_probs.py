@@ -174,7 +174,7 @@ def build_transition_scores_df(scores: np.ndarray, df_patients: pd.DataFrame, n_
 
 
 def load_clinical_df(hmm_dir: Path, n_states: int) -> pd.DataFrame:
-    csv_path = hmm_dir / f"hmm_demo_hads_{n_states}.csv"
+    csv_path = hmm_dir / f"hmm_demo_hads2704_{n_states}.csv"
     df = pd.read_csv(csv_path)
     print(f"Analyzing {df['patient'].nunique()} patients")
 

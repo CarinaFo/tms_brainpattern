@@ -62,20 +62,20 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
 # first levevl hmm states are set to be equal to second level hmm states as discussed with Mats van Es
-n_states_level1 = [6, 8, 10]
+n_states_level1 = [10]
 n_states_level2 = n_states_level1 # same state resolution on both HMM levels
 
 sess_idx=99 # 99: all sessions concatenated
 
 # TODO: add main to script
-# for n_states in n_states_level1:
+for n_states in n_states_level1:
     #print(f"{n_states}")
     # run this once to get a dataframe with cycle parameters added to clinical data
     # df_state2 = add_cycle_parameters_to_df(n_states, 99)
     # baseline analysis only
-    # analyse_cycle_params(n_states)
+    analyse_cycle_params(n_states)
     # baseline and symptom change
-    # plot_pc_vs_symptom_change(n_states)
+    plot_pc_vs_symptom_change(n_states)
 
 
 def analyse_cycle_params(n_states_level1: int, robust="HC3"):
@@ -700,7 +700,7 @@ def load_cycle_parameters(n_states_level1: int, n_states_level2: int, sess_idx: 
 def add_cycle_parameters_to_df(n_states_level1: int, sess_idx: int):
 
     # load the clinical data including HMM parameters
-    csv_path = Path(f"{hmm_dir}/hmm_demo_quest_{n_states_level1}.csv")
+    csv_path = Path(f"{hmm_dir}/hmm_demo_hads2704_{n_states_level1}.csv")
 
     df = pd.read_csv(csv_path)
 
@@ -727,7 +727,7 @@ def add_cycle_parameters_to_df(n_states_level1: int, sess_idx: int):
     df_state1["cycle_duration"] = cycle_mean
     df_state1["cycle_rate"] = 1.0 / df_state1["cycle_duration"].astype(float)
 
-    out_csv = hmm_dir / f"df_includingcycles_{n_states_level1}.csv"
+    out_csv = hmm_dir / f"df_includingcycles2704_{n_states_level1}.csv"
     df_state1.to_csv(out_csv, index=False)
 
     return df_state1
@@ -736,7 +736,7 @@ def add_cycle_parameters_to_df(n_states_level1: int, sess_idx: int):
 def load_and_prep_data(n_states_level1, exclude_repeater: bool = False):
     
     # read df including cycle params
-    csv_path = Path(f'{hmm_dir}/df_includingcycles_{n_states_level1}.csv')
+    csv_path = Path(f'{hmm_dir}/df_includingcycles2704_{n_states_level1}.csv')
 
     # read csv file containing clinical and hmm data
     df = pd.read_csv(csv_path)

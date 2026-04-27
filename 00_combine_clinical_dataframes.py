@@ -182,6 +182,6 @@ def combine_dataframes(manual_updated: bool = True):
     cols = ['patient'] + [c for c in df_combined.columns if c != 'patient']
     df_combined = df_combined[cols]
 
-    df_combined.to_csv(f'{base_dir}/Lab_LucaC/Carina/clinical_demo_combined_240426.csv')
+    df_combined.to_csv(f'{base_dir}/Lab_LucaC/Carina/clinical_demo_combined_270426.csv')
 
     return df_combined

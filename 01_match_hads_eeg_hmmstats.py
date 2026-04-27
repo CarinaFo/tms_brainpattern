@@ -263,7 +263,7 @@ def save_summary_stats_df(n_sessions: int = 6, n_states: int = None):
     # 2) Load combined clinical/demographic dataframe
     # ---------------------------------------------------------
     df = pd.read_csv(
-        f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/clinical_demo_combined_240426.csv'
+        f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/clinical_demo_combined_270426.csv'
     )
 
     # standardize columns just in case
@@ -438,7 +438,7 @@ def save_summary_stats_df(n_sessions: int = 6, n_states: int = None):
     # ---------------------------------------------------------
     # 10) Save outputs
     # ---------------------------------------------------------
-    df_eeg.to_csv(Path(f"{hmm_dir}/hmm_demo_hads2404_{n_states}.csv"), index=False)
+    df_eeg.to_csv(Path(f"{hmm_dir}/hmm_demo_hads2704_{n_states}.csv"), index=False)
 
     if not future_hads_df.empty:
         future_hads_df.to_csv(
