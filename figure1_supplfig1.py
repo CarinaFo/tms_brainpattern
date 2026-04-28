@@ -10,6 +10,10 @@ import seaborn as sns
 from scipy.stats import spearmanr
 import statsmodels.formula.api as smf
 
+
+# text editable in inkscape
+plt.rcParams['svg.fonttype'] = 'none'
+
 plt.rcParams['pdf.fonttype'] = 42
 plt.rcParams.update({
     "font.family": "Arial",
@@ -37,7 +41,7 @@ def lighten_color(color, amount=0.6):
 light_color = lighten_color(base_color, amount=0.6)
 
 home_dir = Path("L:/Lab_LucaC/Carina/")
-csv_path = home_dir / "canonical_hmm_finalsample/clinical_demo_combined_210426.csv"
+csv_path = home_dir / "canonical_hmm_finalsample/clinical_demo_combined_270426.csv"
 fig_dir_suppl = home_dir / "canonical_hmm_finalsample/hmm_fits_05Hzcanonical_1Hzfiltered/figures/supplementary_figures"
 fig_dir_suppl.mkdir(parents=True, exist_ok=True)
 
@@ -71,6 +75,7 @@ def load_and_prep_data(exclude_repeater=False):
     return df
 
 def plot_symptoms_pre_w2_w4(outcome_variable="hads_dep_total"):
+
     df = load_and_prep_data()
 
     session_order = ["pre", "week 2", "week 4"]
@@ -82,6 +87,21 @@ def plot_symptoms_pre_w2_w4(outcome_variable="hads_dep_total"):
         .dropna(subset=[outcome_variable])
     )
     plot_df = plot_df[plot_df["session"].isin(session_order)].copy()
+
+    plot_df["session"] = pd.Categorical(
+        plot_df["session"],
+        categories=["pre", "week 2", "week 4"],
+        ordered=True
+    )
+
+    model = smf.mixedlm(
+        f"{outcome_variable} ~ session",
+        data=plot_df,
+        groups=plot_df["patient"]
+    ).fit()
+
+    print(model.summary())
+
     plot_df["session"] = pd.Categorical(
         plot_df["session"], categories=session_order, ordered=True
     )
@@ -190,6 +210,14 @@ def make_supplfig1():
     hads_long["session"] = pd.Categorical(
         hads_long["session"], categories=session_order, ordered=True
     )
+
+    model = smf.mixedlm(
+        f"hads_dep_total ~ session",
+        data=hads_long,
+        groups=hads_long["patient"]
+    ).fit()
+
+    print(model.summary())
 
     sns.lineplot(
         data=hads_long,
@@ -330,12 +358,9 @@ def make_supplfig1():
     axC.spines["right"].set_visible(False)
 
     plt.tight_layout()
-    plt.savefig(fig_dir / "supplfig1.png", dpi=300, bbox_inches="tight")
-    plt.savefig(fig_dir / "supplfig1.svg", dpi=300, bbox_inches="tight")
+    plt.savefig(fig_dir_suppl / "supplfig1.png", dpi=300, bbox_inches="tight")
+    plt.savefig(fig_dir_suppl / "supplfig1.svg", dpi=300, bbox_inches="tight")
     plt.show()
 
     print(model.summary())
     print(f"Spearman rho (HADS-D vs MADRS improvement): {rho:.3f}")
-
-
-make_combined_clinical_figure()
