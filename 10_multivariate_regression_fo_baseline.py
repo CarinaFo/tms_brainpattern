@@ -26,6 +26,8 @@ import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 
+# text editable in inkscape
+plt.rcParams['svg.fonttype'] = 'none'
 
 # -----------------------------
 # Plot style (Nature-ish)
@@ -339,14 +341,14 @@ def plot_baseline_figure(
     d["state_cat"] = pd.Categorical(d["state_num"], categories=state_order, ordered=True)
 
     fig, axes = plt.subplots(
-        3, 2,
+        2, 2,
         figsize=figsize,
-        gridspec_kw={"height_ratios": [1.2, 1, 1]},
+        #gridspec_kw={"height_ratios": [1.2, 1, 1]},
         constrained_layout=True
     )
+
     axA, axB = axes[0, 0], axes[0, 1]
     axC, axD = axes[1, 0], axes[1, 1]
-    axE, axF = axes[2, 0], axes[2, 1]
 
     # ---- Panel A: FO distribution across states ----
     sns.violinplot(
@@ -374,8 +376,10 @@ def plot_baseline_figure(
         medianprops={"color": "black", "linewidth": 2.2},
         ax=axA
     )
-    axA.set_xlabel("HMM states")
-    axA.set_ylabel("Fractional occupancy (FO)")
+    axA.set_xlabel("Brain States")
+    axA.set_ylabel("Fractional Occupancy (FO)")
+    axA.set_yticks([0, 0.2, 0.4])
+    axA.set_yticklabels(['0', '0.2', '0.4'])
     _strip_spines(axA)
 
     # ---- Panel B: forest plot of beta(HADS-D) ----
@@ -392,8 +396,10 @@ def plot_baseline_figure(
         axB.axvline(0, color="black", linewidth=1)
         axB.set_yticks(y)
         axB.set_yticklabels(labels)
-        axB.set_ylabel("HMM states")
-        axB.set_xlabel("β (HADS-D) predicting FO (logit scale)")
+        axB.set_xticks([-0.05, 0, 0.1])
+        axB.set_xticklabels(['-0.05', '0', '0.1'])
+        axB.set_ylabel("Brain States")
+        axB.set_xlabel("β (HADS-D) predicting FO")
     else:
         axB.text(0.5, 0.5, "No states met min_n", ha="center", va="center", transform=axB.transAxes)
         axB.set_axis_off()
@@ -430,6 +436,11 @@ def plot_baseline_figure(
         ax.plot(x_vals, mean, color="black", linewidth=3)
         ax.fill_between(x_vals, low, high, color="black", alpha=0.2)
         ax.set_xlabel("Baseline HADS-D")
+        ax.set_xticks([5, 10, 15, 20])
+        ax.set_xticklabels(['5', '10', '15', '20'])
+        if st == 2:
+            ax.set_yticks([0.10, 0.15, 0.20, 0.25])
+            ax.set_yticklabels(['0.10', '0.15', '0.20', '0.25'])
         ax.set_ylabel("FO")
         _strip_spines(ax)
 
@@ -555,7 +566,7 @@ if __name__ == "__main__":
             fig_dir=fig_dir,
             n_states=ns,
             state_for_panels=(1, 2),
-            correction="bonferroni",   # set to None to skip correction
+            correction="fdr_bh",   # set to None to skip correction
             robust="HC3",
             min_n=10,
         )
