@@ -16,6 +16,8 @@ from statsmodels.stats.multitest import multipletests
 
 # setting for nature publishing
 plt.rcParams['pdf.fonttype']=42
+# text editable in inkscape
+plt.rcParams['svg.fonttype'] = 'none'
 
 # linux doesn't have Arial
 plt.rcParams.update({
