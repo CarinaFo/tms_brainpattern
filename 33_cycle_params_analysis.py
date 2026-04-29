@@ -28,6 +28,9 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import matplotlib.ticker as mticker
 
+# text editable in inkscape
+plt.rcParams['svg.fonttype'] = 'none'
+
 # setting for nature publishing
 plt.rcParams['pdf.fonttype']=42
 
@@ -61,22 +64,15 @@ hmm_dir = Path(f'{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/hmm_fits_
 
 output_dir = Path(f"{hmm_dir}/figures/cycles")
 
+eeg_length_path = Path(
+    f"{base_dir}/Lab_LucaC/Carina/canonical_hmm_finalsample/"
+    "prepared_data_giles_05Hz_1Hzfiltereddata/eeg_recording_length.csv")
+
 # first levevl hmm states are set to be equal to second level hmm states as discussed with Mats van Es
 n_states_level1 = [10]
 n_states_level2 = n_states_level1 # same state resolution on both HMM levels
 
 sess_idx=99 # 99: all sessions concatenated
-
-# TODO: add main to script
-for n_states in n_states_level1:
-    #print(f"{n_states}")
-    # run this once to get a dataframe with cycle parameters added to clinical data
-    # df_state2 = add_cycle_parameters_to_df(n_states, 99)
-    # baseline analysis only
-    analyse_cycle_params(n_states)
-    # baseline and symptom change
-    plot_pc_vs_symptom_change(n_states)
-
 
 def analyse_cycle_params(n_states_level1: int, robust="HC3"):
 
@@ -93,14 +89,14 @@ def analyse_cycle_params(n_states_level1: int, robust="HC3"):
     )
 
     # outlier removal
-    df_removeoutlier = df_clean[
-        (np.abs(zscore(df_clean["cycle_rate"].astype(float), nan_policy="omit")) < 3) &
-        (np.abs(zscore(df_clean["cycle_strength"].astype(float), nan_policy="omit")) < 3) &
-        (np.abs(zscore(df_clean["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
-    ].copy()
+    # df_removeoutlier = df_clean[
+    #    (np.abs(zscore(df_clean["cycle_rate"].astype(float), nan_policy="omit")) < 3) &
+    #    (np.abs(zscore(df_clean["cycle_strength"].astype(float), nan_policy="omit")) < 3) &
+    #    (np.abs(zscore(df_clean["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
+    #].copy()
 
     # baseline-only subset
-    d0 = df_removeoutlier.query("session == 1 and tms == 'pre'").copy()
+    d0 = df_clean.query("session == 1 and tms == 'pre'").copy()
 
     m_rate = smf.ols("np.log(cycle_rate) ~ hads_dep_total + age + C(gender)", data=d0).fit(cov_type=robust)
     m_strength = smf.ols("cycle_strength ~ hads_dep_total + age + C(gender)", data=d0).fit(cov_type=robust)
@@ -123,7 +119,7 @@ def analyse_cycle_params(n_states_level1: int, robust="HC3"):
     
     plot_cycle_params_baseline_hads(d0, ses_idx=sess_idx, n_states_level1=n_states_level1)
 
-    return df_removeoutlier
+    return df_clean
 
 
 def plot_pc_vs_symptom_change(n_states_level1: int,
@@ -167,10 +163,12 @@ def plot_pc_vs_symptom_change(n_states_level1: int,
     df_merge = df_merge.merge(df_cov, on="patient", how="left").dropna()
 
     # Outlier removal (only cycle metrics, as you had)
-    df_clean = df_merge[
-        (np.abs(zscore(df_merge["cycle_strength_change"], nan_policy="omit")) < 3) &
-        (np.abs(zscore(df_merge["cycle_rate_change"], nan_policy="omit")) < 3)
-    ].copy()
+    #df_clean = df_merge[
+    #    (np.abs(zscore(df_merge["cycle_strength_change"], nan_policy="omit")) < 3) &
+    #    (np.abs(zscore(df_merge["cycle_rate_change"], nan_policy="omit")) < 3)
+    #].copy()
+
+    df_clean = df_merge
 
     # Build baseline + next symptom columns depending on session
     df_clean["sym_base"] = np.where(df_clean["session"] == 1, df_clean["s1"], df_clean["s2"])
@@ -743,6 +741,8 @@ def load_and_prep_data(n_states_level1, exclude_repeater: bool = False):
 
     unique_ids = pd.unique(pd.Series(df['patient']))
     
+    df = add_recording_length(df)
+
     # exclude patients that repeated TMS treatment?
     if exclude_repeater:
         repeater_ids = [i for i in unique_ids if "R" in str(i)]
@@ -759,3 +759,50 @@ def load_and_prep_data(n_states_level1, exclude_repeater: bool = False):
         df[col] = df[col].astype("category")
 
     return df
+
+
+def add_recording_length(df):
+    # merge EEG recording length
+    eeg_rec_length = pd.read_csv(eeg_length_path)
+
+    df["patient"] = df["patient"].astype(str)
+    eeg_rec_length["patient"] = eeg_rec_length["patient"].astype(str)
+
+    df["session"] = pd.to_numeric(df["session"], errors="coerce").astype("Int64")
+    eeg_rec_length["session"] = pd.to_numeric(eeg_rec_length["session"], errors="coerce").astype("Int64")
+    df["tms"] = df["tms"].astype(str).str.lower()
+
+    # map EEG recording index (0..5) to clinical session (1..3) and tms (pre/post)
+    eeg_rec_length["session_clinical"] = (eeg_rec_length["session"] // 2) + 1
+    eeg_rec_length["tms"] = np.where(eeg_rec_length["session"] % 2 == 0, "pre", "post")
+
+    # keep only relevant columns
+    eeg_rec_length = eeg_rec_length[["patient", "session_clinical", "tms", "eeg_recording_length"]]
+    eeg_rec_length = eeg_rec_length.drop_duplicates(subset=["patient", "session_clinical", "tms"])
+
+    # rename for merge
+    eeg_rec_length = eeg_rec_length.rename(columns={"session_clinical": "session"})
+    
+    # merge on patient + session + tms
+    df = df.merge(
+        eeg_rec_length,
+        on=["patient", "session", "tms"],
+        how="left"
+    )
+
+    df["eeg_recording_length"] = (
+    df["eeg_recording_length"] - df["eeg_recording_length"].mean()
+        ) / df["eeg_recording_length"].std()
+
+    return df
+
+
+if __name__ == 'main':
+    for n_states in n_states_level1:
+        #print(f"{n_states}")
+        # run this once to get a dataframe with cycle parameters added to clinical data
+        df_state2 = add_cycle_parameters_to_df(n_states, 99)
+        # baseline analysis only
+        analyse_cycle_params(n_states)
+        # baseline and symptom change
+        plot_pc_vs_symptom_change(n_states)
