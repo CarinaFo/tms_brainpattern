@@ -485,6 +485,69 @@ def compare_interaction_model(long_df):
 
     return model_no_int, model_int, lr_stat, df_diff, p_value
 
+def get_deltafo(n_states, state, session):
+    df = load_and_prep_data(n_states)
+
+    fo = (
+        df[df["tms"].isin(["pre", "post"])]
+        .groupby(["patient", "session", "state", "tms"])["fo"]
+        .mean()
+        .reset_index()
+    )
+
+    fo_wide = (
+        fo.pivot_table(index=["patient", "session", "state"], columns="tms", values="fo")
+        .reset_index()
+    )
+
+    fo_wide["delta_fo"] = fo_wide["pre"] - fo_wide["post"]
+
+    d = fo_wide[
+        (fo_wide["state"] == state) &
+        (fo_wide["session"] == session)
+    ][["patient", "delta_fo"]].copy()
+
+    return d
+
+def correlate_with_reference(state=1, session=1, ref=10, others=[6, 8, 12]):
+    
+    ref_df = get_deltafo(ref, state, session).rename(columns={"delta_fo": "delta_ref"})
+    
+    results = []
+
+    for ns in others:
+        d = get_deltafo(ns, state, session).rename(columns={"delta_fo": f"delta_{ns}"})
+
+        merged = ref_df.merge(d, on="patient", how="inner")
+
+        r, p = scipy.stats.pearsonr(
+            merged["delta_ref"],
+            merged[f"delta_{ns}"]
+        )
+
+        results.append({
+            "state": state,
+            "session": session,
+            "comparison": f"{ns} vs {ref}",
+            "r": r,
+            "p": p
+        })
+
+    return pd.DataFrame(results)
+
+df_corr = correlate_with_reference(state=1, session=1)
+
+order = ["6 vs 10", "8 vs 10", "12 vs 10"]
+df_corr["comparison"] = pd.Categorical(df_corr["comparison"], categories=order, ordered=True)
+df_corr = df_corr.sort_values("comparison")
+
+plt.plot(df_corr["comparison"], df_corr["r"], marker="o", color="black")
+
+plt.ylabel("Correlation with 10-state model")
+plt.xlabel("HMM resolution")
+plt.ylim(0, 1)
+
+plt.show()
 
 if __name__ == "__main__":
 
