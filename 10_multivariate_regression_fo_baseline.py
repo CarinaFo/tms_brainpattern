@@ -28,11 +28,8 @@ from statsmodels.stats.multitest import multipletests
 
 # text editable in inkscape
 plt.rcParams['svg.fonttype'] = 'none'
-
-# -----------------------------
-# Plot style (Nature-ish)
-# -----------------------------
 plt.rcParams["pdf.fonttype"] = 42
+
 plt.rcParams.update({
     "font.family": "Arial",
     "font.sans-serif": ["DejaVu Sans"],
