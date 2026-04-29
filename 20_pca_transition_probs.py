@@ -24,6 +24,8 @@ from scipy.stats import zscore
 
 import matplotlib.pyplot as plt
 
+# text editable in inkscape
+plt.rcParams['svg.fonttype'] = 'none'
 
 # -----------------------------
 # Plot style (Nature-ish)
@@ -256,8 +258,8 @@ def baseline_pc_vs_hads(df: pd.DataFrame, robust: str = "HC3"):
         (np.abs(zscore(d["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
     ].copy()
 
-    m_pc1 = smf.ols("PC1 ~ hads_dep_total + fo + age + C(gender)", data=d).fit(cov_type=robust)
-    m_pc2 = smf.ols("PC2 ~ hads_dep_total + fo + age + C(gender)", data=d).fit(cov_type=robust)
+    m_pc1 = smf.ols("PC1 ~ hads_dep_total + age + C(gender)", data=d).fit(cov_type=robust)
+    m_pc2 = smf.ols("PC2 ~ hads_dep_total +  age + C(gender)", data=d).fit(cov_type=robust)
 
     print(m_pc1.summary())
     print(m_pc2.summary())
@@ -311,7 +313,7 @@ def pc_change_predicts_next_symptoms(
     d["session"] = d["session"].astype(int)
 
     # outlier removal on PC2_change only (keep simple)
-    d = d[np.abs(zscore(d["PC2_change"], nan_policy="omit")) < 3].copy()
+    #d = d[np.abs(zscore(d["PC2_change"], nan_policy="omit")) < 3].copy()
 
     # session 1->2
     d1 = d[d["session"] == 1].copy()
