@@ -55,7 +55,7 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
     Drops patients with missing baseline HADS-D (session 1, pre).
     Adds EEG recording length by patient and session.
     """
-    csv_path = Path(f"{hmm_dir}/hmm_demo_hads_{n_states}.csv")
+    csv_path = Path(f"{hmm_dir}/hmm_demo_hads2704_{n_states}.csv")
     df = pd.read_csv(csv_path)
 
     df = add_recording_length(df)
@@ -127,6 +127,7 @@ def prepare_delta_fo(
         .mean()
         .reset_index()
     )
+
     fo_wide_tms = (
         fo_prepost
         .pivot_table(index=["patient", "session", "state"], columns="tms", values="fo")
@@ -154,10 +155,17 @@ def prepare_delta_fo(
             .rename(columns={st1: dfo1, st2: dfo2})
         )
 
-        # use recording length from the baseline session of the transition
+        # use recording length from the baseline session of the transition (pre TMS)
+        #rec_len = (
+        #    df[(df["session"].astype(int) == s) & (df["tms"] == 'pre')][["patient", "eeg_recording_length"]]
+         #   .drop_duplicates()
+        #)
+
+        # use mean recording length of pre + post EEG
         rec_len = (
-            df[df["session"].astype(int) == s][["patient", "eeg_recording_length"]]
-            .drop_duplicates()
+            df[df["session"].astype(int) == s]
+            .groupby(["patient", "session"], as_index=False)["eeg_recording_length"]
+            .mean()
         )
 
         tmp = (
