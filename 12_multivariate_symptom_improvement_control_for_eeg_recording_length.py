@@ -15,6 +15,8 @@ from statsmodels.stats.multitest import multipletests
 
 # setting for nature publishing
 plt.rcParams['pdf.fonttype'] = 42
+# text editable in inkscape
+plt.rcParams['svg.fonttype'] = 'none'
 
 # linux doesn't have Arial
 plt.rcParams.update({
@@ -527,6 +529,110 @@ def add_recording_length(df):
     return df
 
 
+def plot_transition2_control_betas(all_states, fig_dir, state_for_reg=(1, 2)):
+    """
+    Supplementary figure:
+    A) beta for ΔFO state 1
+    B) beta for ΔFO state 2
+    C) beta for EEG recording length
+
+    Uses transition 2 models only.
+    """
+
+    rows = []
+
+    st1, st2 = state_for_reg
+    terms = [
+        f"delta_fo_state{st1}",
+        f"delta_fo_state{st2}",
+        "eeg_recording_length",
+    ]
+
+    for n_states in all_states:
+        print(f"Extracting betas for n_states={n_states}")
+
+        long_df = prepare_delta_fo(
+            n_states,
+            state_for_reg=state_for_reg,
+            scale_deltafo_by_100=True,
+            scale_eeg_recording_length=True,
+        )
+
+        models = fit_two_session_models(
+            long_df,
+            state_for_reg=state_for_reg,
+        )
+
+        model = models[2]  # second transition only
+
+        ci = model.conf_int(alpha=0.05)
+
+        for term in terms:
+            rows.append({
+                "n_states": n_states,
+                "term": term,
+                "beta": model.params[term],
+                "se": model.bse[term],
+                "ci_low": ci.loc[term, 0],
+                "ci_high": ci.loc[term, 1],
+                "p": model.pvalues[term],
+            })
+
+    beta_df = pd.DataFrame(rows)
+    beta_df.to_csv(fig_dir / "supp_transition2_control_betas.csv", index=False)
+
+    # -----------------------------
+    # Plot
+    # -----------------------------
+    panel_info = [
+        (f"delta_fo_state{st2}", f"a  symptom change Session 11 - Session 20 HADS-D ~ ΔFO state {st2}"),
+        ("eeg_recording_length", "b  symptom change Session 11 - Session 20 HADS-D ~ EEG recording length"),
+    ]
+
+    fig, axes = plt.subplots(
+        1, 2,
+        figsize=(12, 4),
+        constrained_layout=True,
+        sharex=True,
+    )
+
+    for ax, (term, title) in zip(axes, panel_info):
+        d = beta_df[beta_df["term"] == term].copy()
+        d = d.sort_values("n_states")
+
+        x = np.arange(len(d))
+
+        ax.errorbar(
+            x,
+            d["beta"],
+            yerr=[
+                d["beta"] - d["ci_low"],
+                d["ci_high"] - d["beta"],
+            ],
+            fmt="o",
+            color="black",
+            ecolor="black",
+            elinewidth=1.5,
+            capsize=4,
+        )
+
+        ax.axhline(0, linestyle=":", color="black", linewidth=1)
+
+        ax.set_title(title)
+        ax.set_xlabel("HMM states")
+        ax.set_xticks(x)
+        ax.set_xticklabels(d["n_states"].astype(str))
+        ax.set_ylabel("β coefficient")
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    fig.savefig(fig_dir / "supp_transition2_control_betas.svg")
+    fig.savefig(fig_dir / "supp_transition2_control_betas.png", dpi=300)
+
+    return fig, axes, beta_df
+
+
 if __name__ == "__main__":
 
     all_states = [6, 8, 10, 12]
@@ -552,3 +658,10 @@ if __name__ == "__main__":
             models,
             savepath=f'{fig_dir}/fig3_{n_states}'
         )
+    
+    # suppl. fig. 9: eeg_recording_length as control
+    fig, axes, beta_df = plot_transition2_control_betas(
+    all_states=all_states,
+    fig_dir=fig_dir,
+    state_for_reg=(1, 2),
+    )
