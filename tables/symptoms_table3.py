@@ -29,7 +29,7 @@ plt.rcParams.update({
 # Configuration
 # --------------------------------------------------
 home_dir = Path("L:/Lab_LucaC/Carina/")
-csv_path = Path(f"{home_dir}/canonical_hmm_finalsample/clinical_demo_combined_012026.csv")
+csv_path = Path(f"{home_dir}/canonical_hmm_finalsample/clinical_demo_combined_270426.csv")
 fig_dir = Path(f'{home_dir}/canonical_hmm_finalsample/figures')
 
 if not os.path.exists(fig_dir):
@@ -73,9 +73,6 @@ def load_and_prep_data(exclude_repeater: bool = False):
     df = df[df["patient"].isin(patient_ids["patient_id"])]
 
     print(f"Analyzing {df['patient'].nunique()} patients")
-
-    # compute years with depression
-    df["years_with_depression"] = df["age"] - df["age of symptom onset"]
 
     return df
 
