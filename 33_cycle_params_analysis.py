@@ -74,12 +74,34 @@ n_states_level2 = n_states_level1 # same state resolution on both HMM levels
 
 sess_idx=99 # 99: all sessions concatenated
 
-def analyse_cycle_params(n_states_level1: int, robust="HC3"):
+def fit_regression(formula, data, robust="HC3", model_type="ols"):
+    """
+    model_type:
+        "ols" = ordinary least squares with robust SE
+        "rlm" = robust linear model, downweights influential observations
+    """
+
+    if model_type == "ols":
+        return smf.ols(
+            formula,
+            data=data
+        ).fit(cov_type=robust)
+
+    elif model_type == "rlm":
+        return smf.rlm(
+            formula,
+            data=data
+        ).fit()
+
+    else:
+        raise ValueError("model_type must be 'ols' or 'rlm'")
+
+
+def analyse_cycle_params(n_states_level1: int, robust="HC3", model_type="ols"):
 
     df_cycle = load_and_prep_data(n_states_level1)
 
-    # better for linear modelling
-    df_cycle['cycle_strength'] = df_cycle['cycle_strength']*100
+    df_cycle["cycle_strength"] = df_cycle["cycle_strength"] * 100
 
     df_clean = (
         df_cycle
@@ -88,71 +110,99 @@ def analyse_cycle_params(n_states_level1: int, robust="HC3"):
         .copy()
     )
 
-    # outlier removal
-    # df_removeoutlier = df_clean[
-    #    (np.abs(zscore(df_clean["cycle_rate"].astype(float), nan_policy="omit")) < 3) &
-    #    (np.abs(zscore(df_clean["cycle_strength"].astype(float), nan_policy="omit")) < 3) &
-    #    (np.abs(zscore(df_clean["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
-    #].copy()
-
-    # baseline-only subset
     d0 = df_clean.query("session == 1 and tms == 'pre'").copy()
 
-    m_rate = smf.ols("np.log(cycle_rate) ~ hads_dep_total + age + C(gender)", data=d0).fit(cov_type=robust)
-    m_strength = smf.ols("cycle_strength ~ hads_dep_total + age + C(gender)", data=d0).fit(cov_type=robust)
+    m_rate = fit_regression(
+        "np.log(cycle_rate) ~ hads_dep_total + age + C(gender)",
+        data=d0,
+        robust=robust,
+        model_type=model_type
+    )
+
+    m_strength = fit_regression(
+        "cycle_strength ~ hads_dep_total + age + C(gender)",
+        data=d0,
+        robust=robust,
+        model_type=model_type
+    )
 
     print(m_rate.summary())
     print(m_strength.summary())
 
-    # control analysis: include FO as regressor (anterior DMN)
-    m_rate_control = smf.ols("np.log(cycle_rate) ~ hads_dep_total + fo + age + C(gender)", data=d0).fit(cov_type=robust)
-    m_strength_control = smf.ols("cycle_strength ~ hads_dep_total + fo + age + C(gender)", data=d0).fit(cov_type=robust)
+    m_rate_control = fit_regression(
+        "np.log(cycle_rate) ~ hads_dep_total + fo + age + C(gender)",
+        data=d0,
+        robust=robust,
+        model_type=model_type
+    )
+
+    m_strength_control = fit_regression(
+        "cycle_strength ~ hads_dep_total + fo + age + C(gender)",
+        data=d0,
+        robust=robust,
+        model_type=model_type
+    )
 
     print(m_rate_control.summary())
     print(m_strength_control.summary())
-    # multicollinearity warnings
 
-    # check correlations
-    np.corrcoef(d0['cycle_rate'], d0['cycle_strength'])
-    np.corrcoef(d0['cycle_rate'], d0['fo'])
-    np.corrcoef(d0['cycle_strength'], d0['fo'])
-    
-    plot_cycle_params_baseline_hads(d0, ses_idx=sess_idx, n_states_level1=n_states_level1)
+    plot_cycle_params_baseline_hads(
+        d0,
+        ses_idx=sess_idx,
+        n_states_level1=n_states_level1,
+        model_type=model_type
+    )
 
     return df_clean
 
 
-def plot_pc_vs_symptom_change(n_states_level1: int,
-    symptom_col='hads_dep_total', 
-    covariates=['age', 'gender'] # control analysis: include FO as regressor
+
+def plot_cycle_params_vs_symptom_change(
+    n_states_level1: int,
+    symptom_col="hads_dep_total",
+    covariates=["age", "gender"],
+    robust="HC3",
+    model_type="ols"
 ):
-    """
-    Test whether TMS-induced PC1/PC2 changes predict symptom change (ΔHADS-D)
-    across session intervals (1, 2), controlling for covariates.
-    Outputs separate regression plots for PC1 and PC2.
-    """
 
-    df = analyse_cycle_params(n_states_level1)
+    df = analyse_cycle_params(
+        n_states_level1,
+        robust=robust,
+        model_type=model_type
+    )
 
-    # --- Data prep ---
     df["session"] = df["session"].astype(int)
 
     def compute_change(df, var):
-        wide = df.pivot_table(index=["patient", "session"], columns="tms", values=var).reset_index()
-        wide[f"{var}_change"] = wide["pre"].astype(float) - wide["post"].astype(float)
+        wide = (
+            df.pivot_table(
+                index=["patient", "session"],
+                columns="tms",
+                values=var
+            )
+            .reset_index()
+        )
+
+        wide[f"{var}_change"] = (
+            wide["pre"].astype(float) -
+            wide["post"].astype(float)
+        )
+
         return wide[["patient", "session", f"{var}_change"]]
 
     cycle_strength_change = compute_change(df, "cycle_strength")
     cycle_rate_change = compute_change(df, "cycle_rate")
 
-    # Symptoms wide (one row per patient)
     sym_wide = (
-        df.pivot_table(index="patient", columns="session", values=symptom_col)
+        df.pivot_table(
+            index="patient",
+            columns="session",
+            values=symptom_col
+        )
         .reset_index()
         .rename(columns={1: "s1", 2: "s2", 3: "s3"})
     )
 
-    # --- Merge: cycle change is long (patient, session); symptoms are wide (patient) ---
     df_merge = (
         cycle_rate_change
         .merge(cycle_strength_change, on=["patient", "session"], how="inner")
@@ -160,39 +210,51 @@ def plot_pc_vs_symptom_change(n_states_level1: int,
     )
 
     df_cov = df[["patient"] + covariates].drop_duplicates()
-    df_merge = df_merge.merge(df_cov, on="patient", how="left").dropna()
+    df_clean = df_merge.merge(df_cov, on="patient", how="left").dropna()
 
-    # Outlier removal (only cycle metrics, as you had)
-    #df_clean = df_merge[
-    #    (np.abs(zscore(df_merge["cycle_strength_change"], nan_policy="omit")) < 3) &
-    #    (np.abs(zscore(df_merge["cycle_rate_change"], nan_policy="omit")) < 3)
-    #].copy()
+    df_clean["sym_base"] = np.where(
+        df_clean["session"] == 1,
+        df_clean["s1"],
+        df_clean["s2"]
+    )
 
-    df_clean = df_merge
+    df_clean["sym_next"] = np.where(
+        df_clean["session"] == 1,
+        df_clean["s2"],
+        df_clean["s3"]
+    )
 
-    # Build baseline + next symptom columns depending on session
-    df_clean["sym_base"] = np.where(df_clean["session"] == 1, df_clean["s1"], df_clean["s2"])
-    df_clean["sym_next"] = np.where(df_clean["session"] == 1, df_clean["s2"], df_clean["s3"])
+    formula = (
+        "sym_next ~ cycle_rate_change + cycle_strength_change + "
+        "sym_base + age + C(gender)"
+    )
 
     df_sess1 = df_clean[df_clean["session"] == 1].copy()
 
-    model_s1 = smf.ols(
-        "sym_next ~ cycle_rate_change + cycle_strength_change + sym_base + age + C(gender)",
-        data=df_sess1
-    ).fit(cov_type='HC3')
+    model_s1 = fit_regression(
+        formula,
+        data=df_sess1,
+        robust=robust,
+        model_type=model_type
+    )
 
     print(model_s1.summary())
 
     df_sess2 = df_clean[df_clean["session"] == 2].copy()
 
-    model_s2 = smf.ols(
-        "sym_next ~ cycle_rate_change + cycle_strength_change + sym_base + age + C(gender)",
-        data=df_sess2
-    ).fit(cov_type='HC3')
+    model_s2 = fit_regression(
+        formula,
+        data=df_sess2,
+        robust=robust,
+        model_type=model_type
+    )
 
     print(model_s2.summary())
 
-    models = {1: model_s1, 2: model_s2}
+    models = {
+        1: model_s1,
+        2: model_s2
+    }
 
     plot_two_session_cycle_regression(
         df_clean=df_clean,
@@ -200,7 +262,7 @@ def plot_pc_vs_symptom_change(n_states_level1: int,
         savepath=f"{output_dir}/symptom_change_cycle_rate_strength_pred"
     )
 
-    return
+    return df_clean, models
 
 
 def plot_two_session_cycle_regression(
@@ -336,7 +398,8 @@ def plot_two_session_cycle_regression(
     return fig, axes
 
 
-def plot_cycle_params_baseline_hads(df, ses_idx, n_states_level1, covariates=('age', 'gender'), robust='HC3'):
+def plot_cycle_params_baseline_hads(df, ses_idx, n_states_level1, covariates=('age', 'gender'), robust='HC3',
+    model_type: str = 'ols'):
     """
     Plot cycle dynamics.
     
@@ -459,8 +522,19 @@ def plot_cycle_params_baseline_hads(df, ses_idx, n_states_level1, covariates=('a
         (np.abs(zscore(dfp["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
     ].copy()
 
-    m_strength = smf.ols("cycle_strength ~ hads_dep_total + age + C(gender)", data=dfp).fit(cov_type=robust)
-    m_rate     = smf.ols("cycle_rate ~ hads_dep_total + age + C(gender)", data=dfp).fit(cov_type=robust)
+    m_strength = fit_regression(
+    "cycle_strength ~ hads_dep_total + age + C(gender)",
+    data=dfp,
+    robust=robust,
+    model_type=model_type
+    )
+
+    m_rate = fit_regression(
+        "cycle_rate ~ hads_dep_total + age + C(gender)",
+        data=dfp,
+        robust=robust,
+        model_type=model_type
+    )
 
     cov_pred = {
         "age": float(dfp["age"].mean()),

@@ -123,24 +123,70 @@ def prepare_delta_fo(
         long_df[dfo1] = long_df[dfo1].astype(float) * 100.0
         long_df[dfo2] = long_df[dfo2].astype(float) * 100.0
 
+    for col in [dfo1, dfo2]:
+
+        long_df[col + "_demean"] = (
+            long_df[col] -
+            long_df.groupby("transition")[col].transform("mean")
+        )
+
     return long_df
 
 
-def fit_two_session_models(long_df, state_for_reg=(1, 2), robust="HC3"):
+def fit_two_session_models(
+    long_df,
+    state_for_reg=(1, 2),
+    robust="HC3",
+    model_type="rlm",   # "ols" or "rlm"
+    use_demeaned=False
+):
 
     st1, st2 = state_for_reg
-    dfo1 = f"delta_fo_state{st1}"
-    dfo2 = f"delta_fo_state{st2}"
+
+    if use_demeaned:
+        dfo1 = f"delta_fo_state{st1}_demean"
+        dfo2 = f"delta_fo_state{st2}_demean"
+    else:
+        dfo1 = f"delta_fo_state{st1}"
+        dfo2 = f"delta_fo_state{st2}"
 
     models = {}
 
     for sess in [1, 2]:
-        d = long_df[long_df["transition"].astype(int) == sess].copy()
 
-        model = smf.ols(
-            f"sym_next ~ {dfo1} + {dfo2} + sym_base + age + C(gender)",
-            data=d
-        ).fit(cov_type=robust)
+        d = long_df[
+            long_df["transition"].astype(int) == sess
+        ].copy()
+
+        formula = (
+            f"sym_next ~ {dfo1} + {dfo2} + "
+            "sym_base + age + C(gender)"
+        )
+
+        if model_type == "ols":
+
+            model = smf.ols(
+                formula,
+                data=d
+            ).fit(cov_type=robust)
+
+        elif model_type == "rlm":
+
+            model = smf.rlm(
+                formula,
+                data=d
+            ).fit()
+
+            # Get the weights
+            weights = model.weights
+            
+            # Find observations with low weights (likely outliers)
+            outliers = np.where(weights < 0.5)[0]
+            print(f"Potential outliers at indices: {outliers}")
+            print(f"Their weights: {weights[outliers]}")
+
+        else:
+            raise ValueError("model_type must be 'ols' or 'rlm'")
 
         models[sess] = model
 
@@ -553,7 +599,7 @@ if __name__ == "__main__":
 
     # which state models do we have saved?
     # this is used to make sure results are robust and do not depend on N_states
-    all_states=[6, 8, 10, 12]
+    all_states=[6, 8, 10]
 
     n_sessions = 6
 

@@ -246,20 +246,55 @@ def add_pca_to_clinical(
 # -----------------------------
 # Analyses
 # -----------------------------
-def baseline_pc_vs_hads(df: pd.DataFrame, robust: str = "HC3"):
+def fit_regression(formula, data, robust="HC3", model_type="ols"):
     """
-    Baseline association: Session 1 pre only.
+    model_type:
+        "ols" = ordinary least squares with robust SE
+        "rlm" = robust linear model, downweights outliers
     """
+
+    if model_type == "ols":
+        return smf.ols(
+            formula,
+            data=data
+        ).fit(cov_type=robust)
+
+    elif model_type == "rlm":
+        return smf.rlm(
+            formula,
+            data=data
+        ).fit()
+
+    else:
+        raise ValueError("model_type must be 'ols' or 'rlm'")
+
+
+def baseline_pc_vs_hads(
+    df: pd.DataFrame,
+    robust: str = "HC3",
+    model_type: str = "ols"
+):
+
     d = df.query("session == 1 and tms == 'pre'").copy()
 
-    # outlier removal (PC2 + HADS-D)
     d = d[
         (np.abs(zscore(d["PC2"].astype(float), nan_policy="omit")) < 3) &
         (np.abs(zscore(d["hads_dep_total"].astype(float), nan_policy="omit")) < 3)
     ].copy()
 
-    m_pc1 = smf.ols("PC1 ~ hads_dep_total + age + C(gender)", data=d).fit(cov_type=robust)
-    m_pc2 = smf.ols("PC2 ~ hads_dep_total +  age + C(gender)", data=d).fit(cov_type=robust)
+    m_pc1 = fit_regression(
+        "PC1 ~ hads_dep_total + age + C(gender)",
+        data=d,
+        robust=robust,
+        model_type=model_type
+    )
+
+    m_pc2 = fit_regression(
+        "PC2 ~ hads_dep_total + age + C(gender)",
+        data=d,
+        robust=robust,
+        model_type=model_type
+    )
 
     print(m_pc1.summary())
     print(m_pc2.summary())
@@ -287,6 +322,7 @@ def pc_change_predicts_next_symptoms(
     symptom_col: str = "hads_dep_total",
     covariates: list[str] = ["age", "gender"],
     robust: str = "HC3",
+    model_type: str = 'ols'
 ):
     """
     Separate OLS for 1->2 and 2->3:
@@ -318,13 +354,23 @@ def pc_change_predicts_next_symptoms(
     # session 1->2
     d1 = d[d["session"] == 1].copy()
     d1["baseline_symptom"] = d1["s1"]
-    m_s1 = smf.ols("s2 ~ PC2_change + baseline_symptom + age + C(gender)", data=d1).fit(cov_type=robust)
+    m_s1 = fit_regression(
+    "s2 ~ PC2_change + baseline_symptom + age + C(gender)",
+    data=d1,
+    robust=robust,
+    model_type=model_type
+    )
     print(m_s1.summary())
 
     # session 2->3
     d2 = d[d["session"] == 2].copy()
     d2["baseline_symptom"] = d2["s2"]
-    m_s2 = smf.ols("s3 ~ PC2_change + baseline_symptom + age + C(gender)", data=d2).fit(cov_type=robust)
+    m_s2 = fit_regression(
+    "s3 ~ PC2_change + baseline_symptom + age + C(gender)",
+    data=d2,
+    robust=robust,
+    model_type=model_type
+    )
     print(m_s2.summary())
 
     # plot
