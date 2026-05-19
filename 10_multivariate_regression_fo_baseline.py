@@ -138,10 +138,10 @@ def get_baseline_df(df: pd.DataFrame) -> pd.DataFrame:
     baseline = d[(d_visit == "1") & (d_tms == "pre")].copy()
 
     # Find patient with lowest HADS score
-    #lowest_patient = baseline.loc[baseline['hads_dep_total'].idxmin(), 'patient']
+    lowest_patient = baseline.loc[baseline['hads_dep_total'].idxmin(), 'patient']
 
     # Exclude that patient
-    #baseline = baseline[baseline['patient'] != lowest_patient]
+    baseline = baseline[baseline['patient'] != lowest_patient]
         
     # ---------------------------------------------------
     # 🚨 Drop patients with missing baseline HADS-D
@@ -160,41 +160,51 @@ def get_baseline_df(df: pd.DataFrame) -> pd.DataFrame:
 
     return baseline
 
-
 def fit_statewise_baseline_models(
     df_baseline: pd.DataFrame,
     robust: str = "HC3",
     min_n: int = 10,
+    model_type: str = "ols",  # "ols" or "rlm"
 ) -> Tuple[Dict[int, object], pd.DataFrame]:
-    """
-    Fit OLS per state:
-      fo_logit ~ hads_dep_total + age + C(gender)
-    Returns:
-      models: dict[state] -> fitted model
-      summary_df: state-wise table (beta, SE, CI, p, n)
-    """
-    required = ["state", "fo", "hads_dep_total", "age", "gender", 'eeg_recording_length']
+
+    required = ["state", "fo", "hads_dep_total", "age", "gender", "eeg_recording_length"]
     missing = [c for c in required if c not in df_baseline.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
     d = df_baseline.copy()
-
-    # Ensure state is numeric-ish for ordering
     d["state_num"] = pd.to_numeric(d["state"].astype(str), errors="coerce")
-
-    # logit FO
     d["fo_logit"] = logit_transform_fo(d["fo"])
 
-    models: Dict[int, object] = {}
-    rows: list[dict] = []
+    models = {}
+    rows = []
 
     for st in sorted(d["state_num"].dropna().unique().astype(int).tolist()):
+
         ds = d[d["state_num"] == st].copy()
+
         if len(ds) < min_n:
             continue
 
-        m = smf.ols("fo_logit ~ hads_dep_total + age + C(gender)", data=ds).fit(cov_type=robust)
+        formula = "fo_logit ~ hads_dep_total + age + C(gender)"
+
+        if model_type == "ols":
+            m = smf.ols(formula, data=ds).fit(cov_type=robust)
+
+        elif model_type == "rlm":
+            m = smf.rlm(formula, data=ds).fit()
+
+            # Get the weights
+            weights = m.weights
+            
+            # Find observations with low weights (likely outliers)
+            outliers = np.where(weights < 0.5)[0]
+            print(f"Potential outliers at indices: {outliers}")
+            print(f"Their weights: {weights[outliers]}")
+
+        else:
+            raise ValueError("model_type must be 'ols' or 'rlm'")
+
         models[st] = m
 
         term = "hads_dep_total"
@@ -208,9 +218,11 @@ def fit_statewise_baseline_models(
             "ci_low": float(ci.loc[term, 0]),
             "ci_high": float(ci.loc[term, 1]),
             "p": float(m.pvalues[term]),
+            "model_type": model_type,
         })
 
     summary_df = pd.DataFrame(rows).sort_values("state").reset_index(drop=True)
+
     return models, summary_df
 
 
@@ -379,7 +391,7 @@ def plot_baseline_figure(
     axA.set_yticklabels(['0', '0.2', '0.4'])
     _strip_spines(axA)
 
-    # ---- Panel B: forest plot of beta(HADS-D) ----
+    # ---- Panel B: forest plot of beta (HADS-D) ----
     if len(summary_df) > 0:
         y = np.arange(len(summary_df))[::-1]
         labels = summary_df["state"].astype(str).tolist()
@@ -522,11 +534,12 @@ def run_baseline_fo_pipeline(
     correction: Optional[str] = "bonferroni",
     alpha: float = 0.05,
     robust: str = "HC3",
+    model_type: int = 'ols',
     min_n: int = 10,
 ):
     df = load_and_prep_data(hmm_dir, n_states=n_states)
     dfb = get_baseline_df(df) # 700 rows, 70 patients, 10 states
-    models, summary_df = fit_statewise_baseline_models(dfb, robust=robust, min_n=min_n)
+    models, summary_df = fit_statewise_baseline_models(dfb, robust=robust, min_n=min_n, model_type=model_type)
     summary_df = apply_pvalue_correction(summary_df, correction=correction, alpha=alpha)
 
     out_base = fig_dir / f"baseline_fo_regression_states{n_states}"
