@@ -1,5 +1,7 @@
 # tms_brainpattern
 
+Run the code in the dedicated python environment: osle.yml (Python 3.12)
+
 Forster et al., 2026
 
 Preprint: 
