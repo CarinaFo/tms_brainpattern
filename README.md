@@ -2,6 +2,9 @@
 
 Forster et al., 2026
 
+Preprint: 
+https://www.biorxiv.org/content/10.64898/2026.05.27.728312v1.abstract
+
 Code to analyse 64-channel, resting state (eyes closed) EEG data and clinical data obtained from 70 participants that
 underwent repetitive, personalised TMS treatment (20-30 sessions) to the left DLPF for treatment-resistant major depressive disorder at an outpatient clinic.
 
