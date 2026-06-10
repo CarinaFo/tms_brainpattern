@@ -1,0 +1,1 @@
+EEG was collected using ANT NEURO software and hardware. We used the waveguard net (64 channel, equistant layout, wet electrodes) and a eegomylab amplifier (EE-224).
