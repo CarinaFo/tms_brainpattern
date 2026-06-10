@@ -1,6 +1,6 @@
 # tms_brainpattern
 
-Run the code in the dedicated python environment: osle.yml (Python 3.12)
+Run the code in the dedicated python environment: osld.yml (Python 3.10)
 
 Forster et al., 2026
 
@@ -19,12 +19,15 @@ EEG data was preprocessed and projected into source space using custom scripts t
 A canonical 10 state TDE-HMM (Gohil et al., 2026, HMM trained on CAM-CAN dataset) was then applied to the parcellated EEG data (39 parcels)
 and a state time course was inferred for each participant and each session.
 
+The pre-trained models can be found [here](https://github.com/OHBA-analysis/Canonical-HMM-Networks). Credits to Chetan Gohil.
+
 Fractional occupancy, transition probabilites and cycle parameters were extracted from the 10 state HMM and related to baseline
 symptom severity (sefl reported HADS-D) and acute TMS effects on those parameters were used to predict symptom improvement from Session 1 to
 Session 11 and from Session 11 to Session 20.
 
 Baseline regression matched the HADS-D score before the first EEG session, all other HADS-D scores were matched based on proximity (date) to the EEG session, preferably pre TMS. 
 
-The manuscript is under preparation for publication.
+See the preprint for details.
 
-Please contact Carina Forster or Luca Cocchi from QIMRB for data sharing options.
+Please contact Carina Forster regarding data sharing options:
+carinaforster0611@gmail.com or carinaforster@qimrb.edu.au
