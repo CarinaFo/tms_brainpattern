@@ -61,7 +61,11 @@ parcels = {
     "inf_frontal_r": 23,   # update if needed
     "acc_l": 34,
     "acc_r": 35,      # left anterior ACC
-    "acc_midline": 37 
+    "acc_midline": 37,
+    "dorsomedial_pfc_l": 26,
+    "dorsomedial_pfc_r": 27,
+    "dlpfc_l": 28,
+    "dlpfc_r": 29
 }
 
 bands = {

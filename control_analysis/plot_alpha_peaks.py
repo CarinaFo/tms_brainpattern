@@ -19,11 +19,25 @@ elif system == 'windows':
 else:
     "No available system path defined *windows* or *linux*"
 
+# Choose parcels after checking Giles38 labels
+# https://osl-dynamics.readthedocs.io/en/latest/parcellations/giles38.html
 visual_parcels = {
     1: "L V1",
     2: "R V1",
     3: "L visual",
     4: "R visual"
+}
+
+stim_parcels = {
+    "inf_frontal_l": 22,
+    "inf_frontal_r": 23,
+    "acc_l": 34,
+    "acc_r": 35,      
+    "acc_midline": 37,
+    "dorsomedial_pfc_l": 26,
+    "dorsomedial_pfc_r": 27,
+    "dlpfc_l": 28,
+    "dlpfc_r": 29
 }
 
 source_path  = Path("L:/Lab_LucaC/Carina/canonical_hmm_finalsample/source_reco_giles_parcel")
