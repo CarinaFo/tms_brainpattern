@@ -1,4 +1,7 @@
+# TODO: clean up
+
 import pandas as pd
+from datetime import datetime
 import seaborn as sns
 import matplotlib.pyplot as plt 
 from matplotlib.ticker import MaxNLocator
@@ -6,8 +9,8 @@ import numpy as np
 import re
 from matplotlib.backends.backend_pdf import PdfPages
 
-# load csv file from RedCap
-df = pd.read_csv(r"C:\Users\CarinaF\Downloads\P3990PatientExperien_DATA_LABELS_2026-04-02_1325.csv")
+# load latest csv file from RedCap
+df = pd.read_csv(r"C:\Users\CarinaF\Downloads\P3990PatientExperien_DATA_LABELS_2026-06-24_0922.csv")
 
 # ID 225 is ID 224 (Record ID 25), Olivia told me on the 15th of January
 
@@ -20,6 +23,42 @@ df = df.dropna(subset=["Patient ID:"])
 df = df.dropna(axis=1, how='all')
 
 column_names = df.columns[3:-1]
+
+# Helper functions
+def convert_age(entry):
+    if pd.isna(entry) or str(entry).strip() == "":
+        return np.nan
+    
+    entry = str(entry).lower().strip()
+
+    # extract number
+    num = re.findall(r"\d+\.?\d*", entry)
+    if not num:
+        return np.nan
+    value = float(num[0])
+
+    # classify unit
+    if "month" in entry or "mo" in entry or "m " in entry:
+        return value / 12   # convert months → years
+    
+    return value  # assume years if no unit or "yr", "y", etc.
+
+def normalize_diagnosis_duration(value, reference_year=None):
+    """
+    Detects if a value is a year (e.g. 2018) or a duration (e.g. 5),
+    and returns the duration in years.
+    """
+    if reference_year is None:
+        reference_year = datetime.now().year  # 2026
+
+    value = float(value)
+
+    # Heuristic: if the value looks like a calendar year, convert it
+    if 1900 <= value <= reference_year:
+        return reference_year - value
+    else:
+        return value  # Already a duration in years
+
 
 # --- Save all plots to a single PDF ---
 with PdfPages("survey_results.pdf") as pdf:
@@ -95,6 +134,7 @@ with PdfPages("survey_results.pdf") as pdf:
 
     # Q5: How long ago diagnosed?
     df[column_names[4]] = df[column_names[4]].apply(convert_age)
+    df[column_names[4]] = [normalize_diagnosis_duration(r) for r in df[column_names[4]]]
 
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
     ax = df[column_names[4]].plot(kind="hist", color='skyblue')
@@ -484,24 +524,3 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.ylabel("")
     plt.xlabel("response count")
     plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
-
-
-# Helper functions
-def convert_age(entry):
-    if pd.isna(entry) or str(entry).strip() == "":
-        return np.nan
-    
-    entry = str(entry).lower().strip()
-
-    # extract number
-    num = re.findall(r"\d+\.?\d*", entry)
-    if not num:
-        return np.nan
-    value = float(num[0])
-
-    # classify unit
-    if "month" in entry or "mo" in entry or "m " in entry:
-        return value / 12   # convert months → years
-    
-    return value  # assume years if no unit or "yr", "y", etc.
-
