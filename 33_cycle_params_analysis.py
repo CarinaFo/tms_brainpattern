@@ -871,7 +871,7 @@ def add_recording_length(df):
     return df
 
 
-if __name__ == 'main':
+if __name__ == '__main__':
     for n_states in n_states_level1:
         #print(f"{n_states}")
         # run this once to get a dataframe with cycle parameters added to clinical data
@@ -879,4 +879,4 @@ if __name__ == 'main':
         # baseline analysis only
         analyse_cycle_params(n_states)
         # baseline and symptom change
-        plot_pc_vs_symptom_change(n_states)
+        plot_cycle_params_vs_symptom_change(n_states)
