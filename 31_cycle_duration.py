@@ -6,7 +6,7 @@ creates windowed features, then fits a second-level Poisson HMM with
 sequential Markov dynamics to estimate cycle duration/rate.
 
 Authors: Mats van Es, Carina Forster
-Last update: 31/03/2026
+Last update: 24/06/2026
 
 Disclaimer: The logic of this code and all steps have been implemented by the author.
             Generative AI (CHAT GPT 5.4 Business) was used to format the script and add
@@ -64,23 +64,24 @@ run = 0
 # run this per state resolution
 # TODO: add to main 
 
-#stc_reorder, data, fo = get_reordered_stc_and_windowed_data(
-#    W=W, ses=ses_all, nses=n_ses, K1=K1
-#)
+stc_reorder, data, fo = get_reordered_stc_and_windowed_data(
+    W=W, ses=ses_all, nses=n_ses, K1=K1
+)
 
-#cycle_duration, free_energy, run_used = run_second_level_hmm(
-#    data=data,
-#    fo=fo,
-#    K1=K1,
-#    K2=K2,
-#    fs=fs,
-#    W=W,
-#    run=run,
-#    out_root=output_dir / f"cycle_rate_{K1}_{K2}",
-#)
+cycle_duration, free_energy, run_used = run_second_level_hmm(
+   data=data,
+   fo=fo,
+    K1=K1,
+   K2=K2,
+    fs=fs,
+      W=W,
+   run=run,
+   out_root=output_dir / f"cycle_rate_{K1}_{K2}",
+)
 
-#print(f"Done. run={run_used+1}, free_energy={free_energy}")
+print(f"Done. run={run_used+1}, free_energy={free_energy}")
 
+test
 
 def make_windowed_features(stc_reordered: list[np.ndarray], W: int, K1: int):
     """
@@ -151,15 +152,15 @@ def get_reordered_stc_and_windowed_data(
 
     td = _load_pickle(tinda_path)
 
-    # Binarize state time course
-    stc_onoff = modes.argmax_time_courses(stc)
-    fo = modes.fractional_occupancies(stc_onoff)
-
     # life time to determine window length (decided to use 16 as in van Es, Higgins)
     # mean_lt = np.mean(modes.mean_lifetimes(stc_onoff))
 
     best_seq = np.asarray(td["best_sequence"])
+
     stc_reordered = [istc[:, best_seq] for istc in stc]
+
+    # Calculate FOs (in the reordered secquence)
+    fo = modes.fractional_occupancies(stc_reordered)
 
     # Windowed counts
     data = make_windowed_features(stc_reordered, W=W, K1=K1)
@@ -170,7 +171,7 @@ def get_reordered_stc_and_windowed_data(
 def init_log_rates(K1: int, K2: int, seq: np.ndarray, fo_mean: np.ndarray, W: int):
     """
     van Es, Higgins et al.: place first-level states on a circle using seq, place K2 meta-states
-    as equally spaced centroids on a circle, then weight by FO and scale by W.
+    as equally spaced centroids on a circle, then weigh by FO and scale by W.
 
     Returns
     -------
@@ -236,7 +237,7 @@ def run_second_level_hmm(
     rundir = out_root / f"run{run+1}"
     rundir.mkdir(parents=True, exist_ok=True)
 
-    # rotation of the first-level ordering
+    # rotation of the first-level ordering (not necessary if K1=K2)
     seq = np.roll(np.arange(K1).flatten(), run)
 
     # Poisson means initialisation
