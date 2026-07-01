@@ -404,7 +404,7 @@ with PdfPages("survey_results.pdf") as pdf:
     ]
 
     # order the index
-    summary_df = summary_df.reindex(order)
+    summary_df_q17 = summary_df.reindex(order)
 
     plot_df = summary_df.reset_index().melt(
         id_vars="index",
@@ -456,6 +456,8 @@ with PdfPages("survey_results.pdf") as pdf:
     # order the index
     summary_df = summary_df.reindex(order)
 
+    df_q18 = summary_df
+
     plot_df = summary_df.reset_index().melt(
         id_vars="index",
         var_name="Question",
@@ -505,6 +507,8 @@ with PdfPages("survey_results.pdf") as pdf:
     # order the index
     summary_df = summary_df.reindex(order)
 
+    df_q19 = summary_df
+
     plot_df = summary_df.reset_index().melt(
         id_vars="index",
         var_name="Question",
@@ -524,3 +528,94 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.ylabel("")
     plt.xlabel("response count")
     plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+
+
+# Analyse Question 17
+flipped_q17 = summary_df_q17.T
+
+row_sums = flipped_q17.sum(axis=1)
+
+pct_df = (flipped_q17.div(row_sums, axis=0) * 100).round()
+
+# Build a combined "n (%)" display dataframe
+display_df = flipped_q17.astype(int).astype(str) + " (" + pct_df.astype(str) + "%)"
+
+display_df.index.name = "Statement"
+display_df.index = [
+    "Very valuable\n(earlier in journey)",
+    "Valuable\n(at TMS decision point)",
+    "Not valuable\nto me",
+    "Would cause\nanxiety/worry"
+]
+
+# Analyse Question 18
+
+probabilities = [10, 30, 50, 70, 90]
+
+n_per_col = df_q18.sum(axis=0)  # N for each probability level
+
+proceed_pct = df_q18.loc["Probably proceed"] / n_per_col * 100
+not_proceed_pct = df_q18.loc["Probably not proceed"] / n_per_col * 100
+not_sure_pct = df_q18.loc["I'm not sure"] / n_per_col * 100
+
+proceed = df_q18.loc["Probably proceed", :].values
+not_proceed = df_q18.loc["Probably not proceed", :].values
+not_sure = df_q18.loc["I'm not sure", :].values
+
+fig, ax = plt.subplots(figsize=(7, 4.5))
+
+ax.plot(probabilities, proceed_pct, 'o-', color="#0F6E56", linewidth=2, 
+        markersize=7, label="Probably proceed")
+ax.plot(probabilities, not_proceed_pct, 'o-', color="#C0392B", linewidth=2, 
+        markersize=7, label="Probably not proceed")
+ax.plot(probabilities, not_sure_pct, 'o--', color="#888888", linewidth=1.5, 
+        markersize=6, label="I'm not sure")
+
+ax.set_xlabel("Predicted probability of responding to TMS (%)", fontsize=11)
+ax.set_ylabel("Respondents (%)", fontsize=11)
+ax.set_xticks(probabilities)
+ax.set_xticklabels([f"{p}%" for p in probabilities])
+ax.set_ylim(0, 100)
+ax.axhline(50, color="gray", linewidth=0.5, linestyle="--", alpha=0.5)
+ax.legend(frameon=False, fontsize=10)
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+plt.savefig("q18_threshold.png", dpi=150, bbox_inches="tight")
+plt.show()
+
+# Analyse Question 19
+
+probabilities = [10, 30, 50, 70, 90]
+
+n_per_col = df_q19.sum(axis=0)  # N for each probability level
+
+proceed_pct = df_q19.loc["Probably continue treatment"] / n_per_col * 100
+not_proceed_pct = df_q19.loc["Probably discontinue treatment"] / n_per_col * 100
+not_sure_pct = df_q19.loc["I'm not sure"] / n_per_col * 100
+
+proceed = df_q19.loc["Probably continue treatment", :].values
+not_proceed = df_q19.loc["Probably discontinue treatment", :].values
+not_sure = df_q19.loc["I'm not sure", :].values
+
+fig, ax = plt.subplots(figsize=(7, 4.5))
+
+ax.plot(probabilities, proceed_pct, 'o-', color="#0F6E56", linewidth=2, 
+        markersize=7, label="Probably proceed")
+ax.plot(probabilities, not_proceed_pct, 'o-', color="#C0392B", linewidth=2, 
+        markersize=7, label="Probably not proceed")
+ax.plot(probabilities, not_sure_pct, 'o--', color="#888888", linewidth=1.5, 
+        markersize=6, label="I'm not sure")
+
+ax.set_xlabel("Predicted probability of responding to TMS (%)", fontsize=11)
+ax.set_ylabel("Respondents (%)", fontsize=11)
+ax.set_xticks(probabilities)
+ax.set_xticklabels([f"{p}%" for p in probabilities])
+ax.set_ylim(0, 100)
+ax.axhline(50, color="gray", linewidth=0.5, linestyle="--", alpha=0.5)
+ax.legend(frameon=False, fontsize=10)
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+plt.savefig("q19_threshold.png", dpi=150, bbox_inches="tight")
+plt.show()
