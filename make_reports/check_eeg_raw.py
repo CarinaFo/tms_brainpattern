@@ -2,12 +2,12 @@ import mne
 from pathlib import Path
 import os
 import matplotlib.pyplot as plt
+from mne.preprocessing import ICA
 
 # run in MNE environment
-
-patient_id = 'D_226A4'
+patient_id = 'D_257'
 home_dir = "L:\Lab_LucaC"
-folder_path = f"{home_dir}\A_QNC_ANT_Data\TMS_MDD_EEG_acceleratedprotocol_data\{patient_id}"
+folder_path = f"{home_dir}\A_QNC_ANT_Data\TMS_MDD_EEG_data\{patient_id}"
 
 vhdr_files = sorted([f for f in os.listdir(folder_path) if f.endswith('.vhdr')])
 print(f"Found {len(vhdr_files)} files:")
@@ -52,8 +52,6 @@ montage = setup_channel_montage()
 # attach channel locations to raw data
 raw.set_montage(montage)
 
-from mne.preprocessing import ICA
-
 # Create ICA object
 ica = ICA(n_components=20, random_state=97, method="fastica")  # or "infomax"
 
@@ -70,7 +68,7 @@ ica.plot_properties(raw, picks=[0, 1, 2])  # inspect a few components
 def setup_channel_montage():
 
     # read in the channel montage x,y,z file provided from ANT Neuro (in mm)
-    montage = mne.channels.read_custom_montage(Path(rf'{home_dir}\Carina\tms_mdd\NA-261_NoRef.xyz'))
+    montage = mne.channels.read_custom_montage(Path(rf'{home_dir}\Carina\canonical_hmm_finalsample\channel_montage\NA-261_NoRef.xyz'))
     
     # Get current montage positions
     pos = montage.get_positions()
