@@ -72,7 +72,7 @@ def batch_rename_folder(folder, old_str=OLD_STR, new_str=NEW_STR, dry_run=True):
 
         if old_base.startswith('1_'): # remove leading 1
             new_base = old_base[2:]
-        if old_str not in old_base:
+        elif old_str not in old_base:
             print(f"Skipping (no '{old_str}' in name): {vhdr_path.name}")
             continue
         
@@ -89,4 +89,4 @@ if __name__ == "__main__":
     batch_rename_folder(folder, dry_run=True)
 
     # Step 2: once it looks correct, uncomment to actually rename
-    #batch_rename_folder(folder, dry_run=False)
+    batch_rename_folder(folder, dry_run=False)
