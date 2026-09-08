@@ -9,7 +9,7 @@ Workflow:
 5) Multiple-comparisons correction across fitted states (optional)
 6) Plot: FO distribution, forest plot, regression prediction-style panels, predicted-vs-observed
 """
-# Disclaimer: Code was prettified using AI
+# Disclaimer: Code was prettified using AI (Claude Opus)
 
 # The author still takes full responsibility for the validity of any logic and results
 
@@ -138,10 +138,10 @@ def get_baseline_df(df: pd.DataFrame) -> pd.DataFrame:
     baseline = d[(d_visit == "1") & (d_tms == "pre")].copy()
 
     # Find patient with lowest HADS score
-    lowest_patient = baseline.loc[baseline['hads_dep_total'].idxmin(), 'patient']
+    #lowest_patient = baseline.loc[baseline['hads_dep_total'].idxmin(), 'patient']
 
     # Exclude that patient
-    baseline = baseline[baseline['patient'] != lowest_patient]
+    #baseline = baseline[baseline['patient'] != lowest_patient]
         
     # ---------------------------------------------------
     # 🚨 Drop patients with missing baseline HADS-D
