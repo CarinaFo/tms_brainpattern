@@ -137,7 +137,7 @@ def fit_two_session_models(
     long_df,
     state_for_reg=(1, 2),
     robust="HC3",
-    model_type="rlm",   # "ols" or "rlm"
+    model_type="ols",   # "ols" or "rlm"
     use_demeaned=False
 ):
 
@@ -303,7 +303,7 @@ def plot_two_session_regression(
 
 
 # Helper functions
-def load_and_prep_data(n_states, exclude_repeater: bool = False):
+def load_and_prep_data(n_states, exclude_repeater: bool = False, exclude_bipolar: bool = True):
     """
     Load and preprocess HMM demo questionnaire data.
     Drops patients with missing baseline HADS-D (session 1, pre).
@@ -313,6 +313,9 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
 
     if exclude_repeater and "patient" in df.columns:
         df = df[~df["patient"].astype(str).str.contains("R")]
+    
+    if exclude_bipolar:
+        df = df[df['group'] != 3]
 
     if "state" in df.columns:
         df["state"] = df["state"] + 1
@@ -338,11 +341,11 @@ def load_and_prep_data(n_states, exclude_repeater: bool = False):
             print(", ".join(sorted(missing_baseline)))
             df = df[~df["patient"].astype(str).isin(missing_baseline)].copy()
 
-    print(f"Analyzing {df['patient'].nunique()} patients")
-
-    for col in ["patient", "session", "tms", "state", "responder", "group", "gender"]:
+    for col in ["patient", "session", 'group', "tms", "state", "responder", "group", "gender"]:
         if col in df.columns:
             df[col] = df[col].astype("category", errors="ignore")
+    
+    print(f"Analyzing {df['patient'].nunique()} patients")
 
     return df
 
@@ -599,7 +602,7 @@ if __name__ == "__main__":
 
     # which state models do we have saved?
     # this is used to make sure results are robust and do not depend on N_states
-    all_states=[6, 8, 10]
+    all_states=[10]
 
     n_sessions = 6
 
