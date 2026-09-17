@@ -1,5 +1,3 @@
-# TODO: clean up
-
 import pandas as pd
 from datetime import datetime
 import seaborn as sns
@@ -8,9 +6,32 @@ from matplotlib.ticker import MaxNLocator
 import numpy as np
 import re
 from matplotlib.backends.backend_pdf import PdfPages
+from pathlib import Path
 
-# load latest csv file from RedCap
-df = pd.read_csv(r"C:\Users\CarinaF\Downloads\P3990PatientExperien_DATA_LABELS_2026-09-16_1608.csv")
+download_path = Path.home() / "Downloads"
+pattern = "P3990PatientExperien_DATA_LABELS_*.csv"
+
+def export_timestamp(path):
+    """Export time from the RedCap filename, falling back to file mtime."""
+    m = re.search(r"_(\d{4}-\d{2}-\d{2})_(\d{4})\.csv$", path.name)
+    if m:
+        return datetime.strptime(m.group(1) + m.group(2), "%Y-%m-%d%H%M")
+    return datetime.fromtimestamp(path.stat().st_mtime)
+
+
+exports = sorted(download_path.glob(pattern), key=export_timestamp)
+
+if not exports:
+    raise FileNotFoundError(f"No RedCap export matching {pattern} in {download_path}")
+
+csv_path = exports[-1]
+export_date = export_timestamp(csv_path)
+print(f"Using export: {csv_path.name}  ({export_date:%d %b %Y %H:%M})")
+
+df = pd.read_csv(csv_path)
+
+# save output
+save_dir = 'C:/Users/CarinaF/tms_brainpattern/viz'
 
 # ID 225 is ID 224 (Record ID 25), Olivia told me on the 15th of January
 
@@ -59,9 +80,25 @@ def normalize_diagnosis_duration(value, reference_year=None):
     else:
         return value  # Already a duration in years
 
+n_valid = len(df)
+
+save_dir = Path(save_dir)
+save_dir.mkdir(parents=True, exist_ok=True)
+pdf_path = save_dir / f"survey_results_{export_date:%Y-%m-%d}_n{n_valid}.pdf"
+
+stamp = f"RedCap export {export_date:%d %b %Y}  ·  n = {n_valid}"
+
+def save_page(fig):
+    fig.text(0.99, 0.01, stamp, ha="right", va="bottom", fontsize=7, color="grey")
+    pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
 
 # --- Save all plots to a single PDF ---
-with PdfPages("survey_results.pdf") as pdf:
+with PdfPages(pdf_path) as pdf:
+
+    meta = pdf.infodict()
+    meta["Title"] = f"P3990 Patient Experience Survey (n = {n_valid})"
+    meta["CreationDate"] = datetime.now()
 
     # Q1: Age
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -78,7 +115,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel("response count")
     plt.ylabel("")
     plt.title(f'Q1: {column_names[0]}')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q2: Gender
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -95,7 +133,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel("response count")
     plt.ylabel("")
     plt.title(f'Q2: {column_names[1]}')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q3: Age of depression diagnosis
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -105,7 +144,8 @@ with PdfPages("survey_results.pdf") as pdf:
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
     plt.xlabel(f'Q3: {column_names[2]}')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q4: Relapse
     rename_dict = {
@@ -130,7 +170,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel("response count")
     plt.ylabel("")
     plt.title(f'Q4: {column_names[3]}')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q5: How long ago diagnosed?
     df[column_names[4]] = df[column_names[4]].apply(convert_age)
@@ -140,7 +181,8 @@ with PdfPages("survey_results.pdf") as pdf:
     ax = df[column_names[4]].plot(kind="hist", color='skyblue')
     plt.title('Q5: How long ago have you been diagnosed with MDD?')
     plt.xlabel('Years since diagnosis')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q6: Therapy and experience with it
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -157,7 +199,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel("response count")
     plt.ylabel("")
     plt.title(f'Q6: {column_names[5]}')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q7: Other treatments
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -174,7 +217,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel("response count")
     plt.ylabel("")
     plt.title(f'Q7: {column_names[6]}')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q8: How did you learn about TMS treatment?
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -191,7 +235,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel("response count")
     plt.ylabel("")
     plt.title(f'Q8: {column_names[7]}')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q9: Support during treatment
     support_cols = df.filter(like="Who supports you")
@@ -211,7 +256,8 @@ with PdfPages("survey_results.pdf") as pdf:
     # Force x-axis to show integer ticks
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.title("Q9: Who supports you in your treatment journey?")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q 10: health professionals visits
     visit_cols = df.columns[df.apply(lambda col: col.astype(str).str.contains(">4 Times").any())]
@@ -255,7 +301,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.title("Q10: In the 12 months prior to starting TMS, how many times did you visit ... ?")
     plt.xlabel("response count")
     plt.ylabel("")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q11: Treatment understanding
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -272,7 +319,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel("response count")
     plt.ylabel("")
     plt.title(f'Q11: {column_names[22]}')
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q 12: treatment expectation
     support_cols = df.filter(like="Which of these")
@@ -290,7 +338,8 @@ with PdfPages("survey_results.pdf") as pdf:
     ax = support_summary.plot(kind='barh', color='skyblue')
     plt.xlabel("response count")
     plt.title("Q12: Which of these match your expectations of TMS?")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q13: Factors of Importance for TMS treatment
     # select columns
@@ -337,7 +386,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.title("Q13: Importance of factors when considering TMS treatment ?")
     plt.xlabel("response count")
     plt.ylabel("Importance")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q14: difficulty of getting treatment
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -346,7 +396,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel('response count')
     plt.ylabel("")
     plt.title("Q14: How easy or difficult has it been for you to access TMS?")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
 
     # Q15: Barriers for treatment
@@ -365,7 +416,8 @@ with PdfPages("survey_results.pdf") as pdf:
     ax = support_summary.plot(kind='barh', color='skyblue')
     plt.xlabel("response count")
     plt.title("Q15: Did you experience any barriers in TMS treatment?")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q16: Fears or concerns
     fig, ax = plt.subplots(figsize=(6,4))  # smaller, consistent size
@@ -374,7 +426,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.ylabel("")
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.title("Q16: Do you have any concerns or fears about the TMS treatment before starting?")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q17: Test predicts treatment outcome
     # select columns
@@ -406,7 +459,7 @@ with PdfPages("survey_results.pdf") as pdf:
     # order the index
     summary_df_q17 = summary_df.reindex(order)
 
-    plot_df = summary_df.reset_index().melt(
+    plot_df = summary_df_q17.reset_index().melt(
         id_vars="index",
         var_name="Question",
         value_name="Count"
@@ -425,7 +478,7 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.xlabel("response count")
     plt.ylabel("")
     plt.tight_layout()
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    save_page(fig)
 
     # Q18: Test result from EEG scan
     test_cols = df.filter(like="The result")
@@ -476,7 +529,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.title("Q18: Response to TMS treatment success test results")
     plt.xlabel("response count")
     plt.ylabel("")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
     # Q19: Continue treatment based on AI prediction
     test_cols = df.filter(like="Based on these")
@@ -527,7 +581,8 @@ with PdfPages("survey_results.pdf") as pdf:
     plt.title("Q19: AI treatment success prediction after 10 TMS sesssions without improvement")
     plt.ylabel("")
     plt.xlabel("response count")
-    plt.tight_layout(); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+    plt.tight_layout()
+    save_page(fig)
 
 
 # Analyse Question 17
@@ -581,7 +636,7 @@ ax.legend(frameon=False, fontsize=10)
 ax.spines[["top", "right"]].set_visible(False)
 
 plt.tight_layout()
-plt.savefig("q18_threshold.png", dpi=150, bbox_inches="tight")
+plt.savefig(save_dir / "q18_threshold.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # Analyse Question 19
@@ -617,5 +672,5 @@ ax.legend(frameon=False, fontsize=10)
 ax.spines[["top", "right"]].set_visible(False)
 
 plt.tight_layout()
-plt.savefig("q19_threshold.png", dpi=150, bbox_inches="tight")
+plt.savefig(save_dir / "q19_threshold.png", dpi=150, bbox_inches="tight")
 plt.show()
