@@ -26,10 +26,12 @@ def setup_channel_montage():
 
 # load EEG montage
 montage = setup_channel_montage()
-raw=mne.io.read_raw_brainvision("L:\Lab_LucaC\A_QNC_ANT_Data\TMS_MDD_EEG_data\D_254\D_254_1_2026-08-17_08-10-04.vhdr", preload=True)
+
+raw=mne.io.read_raw_brainvision("L:\Lab_LucaC\A_QNC_ANT_Data\TMS_MDD_EEG_data\D_256\D_256_1_2026-09-09_16-11-13.vhdr", preload=True)
 raw_cnt= mne.io.read_raw_cnt(r"L:\Lab_LucaC\A_QNC_ANT_Data\TMS_MDD_EEG_data\D_251\wrong_montage\1_D_251_2026-07-27_09-19-35.cnt", preload=True)
 raw_fif = mne.io.read_raw_fif("L:\Lab_LucaC\A_QNC_ANT_Data\TMS_MDD_EEG_data\D_251\D_251_2026-07-27_09-19-35.fif", preload=True)
 
 raw.set_montage(montage)
 
 raw.filter(1,40).plot()
+raw.plot_psd(fmin=1, fmax=40)
