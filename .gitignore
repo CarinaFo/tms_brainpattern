@@ -144,6 +144,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# ignore pdfs etc.
+/viz
+
 # Spyder project settings
 .spyderproject
 .spyproject
