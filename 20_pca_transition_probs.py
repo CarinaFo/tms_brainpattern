@@ -81,7 +81,7 @@ def vectorize_offdiagonal(transitions: np.ndarray) -> tuple[np.ndarray, np.ndarr
       X_off: (n_samples, n_features_offdiag)
       mask:  (n_states, n_states) boolean mask used
     """
-    n_sessions, n_patients, n_states, _ = transitions.shape
+    _, _, n_states, _ = transitions.shape
     mask = ~np.eye(n_states, dtype=bool)
 
     # reshape to (n_samples, n_states, n_states) then take off-diagonal features
@@ -107,7 +107,7 @@ def run_pca_on_transitions(
         scaler = StandardScaler()
         X_in = scaler.fit_transform(X_off)
 
-    pca = PCA(n_components=None)
+    pca = PCA(n_components=None) # centers the data by default
 
     scores = pca.fit_transform(X_in)      # (n_samples, n_components)
 
@@ -129,8 +129,8 @@ def run_pca_on_transitions(
         "mask": mask,
         "scaler": scaler,
         "pca": pca,
-        "scores": scores,
-        "loadings": loadings,
+        "scores": scores, # (X − mean_) @ components_.T
+        "loadings": loadings, # coefficients in Matlab
         "cumvar": cumvar,
     }
 
@@ -197,6 +197,7 @@ def add_pca_to_clinical(
     hmm_dir: Path,
     n_states: int,
     n_sessions: int = 6,
+    exclude_bipolar: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
     """
     Returns merged dataframe and PCA outputs dict.
@@ -211,9 +212,10 @@ def add_pca_to_clinical(
     df_clin = load_clinical_df(hmm_dir, n_states=n_states)
 
     # clinical vars are duplicated across state rows -> keep one row per patient/session/tms
-    # choosing state==1 is a simple way if all clinical vars are state-invariant
+    # choosing state==1 (zero indexed, so this is actually state 2)
+    #  is a simple way if all clinical vars are state-invariant
     if "state" in df_clin.columns:
-        df_clin_uniq = df_clin[df_clin["state"] == 2].copy()
+        df_clin_uniq = df_clin[df_clin["state"] == 1].copy()
     else:
         df_clin_uniq = df_clin.copy()
 
@@ -239,6 +241,9 @@ def add_pca_to_clinical(
     for c in ["session_pca"]:
         if c in df_merged.columns:
             df_merged = df_merged.drop(columns=[c])
+    
+    if exclude_bipolar:
+        df_merged = df_merged[df_merged['group'] != 3]
 
     return df_merged, pca_out
 
@@ -302,7 +307,7 @@ def baseline_pc_vs_hads(
     return d, m_pc1, m_pc2
 
 
-def compute_prepost_change(df: pd.DataFrame, var: str) -> pd.DataFrame:
+def compute_prepost_change(df: pd.DataFrame, var: str, scale: float = 1.0) -> pd.DataFrame:
     """
     Compute Δvar = pre - post within each (patient, session).
     Returns long df with columns: patient, session, {var}_change
@@ -313,7 +318,7 @@ def compute_prepost_change(df: pd.DataFrame, var: str) -> pd.DataFrame:
     )
     if "pre" not in wide.columns or "post" not in wide.columns:
         raise ValueError(f"Need both pre and post for {var} change. Found {wide.columns.tolist()}")
-    wide[f"{var}_change"] = wide["pre"].astype(float) - wide["post"].astype(float)
+    wide[f"{var}_change"] = (wide["pre"].astype(float) - wide["post"].astype(float)) * scale
     return wide[["patient", "session", f"{var}_change"]]
 
 
@@ -330,6 +335,7 @@ def pc_change_predicts_next_symptoms(
       s3 ~ PC2_change + s2 + age + gender
     """
     pc2_change = compute_prepost_change(df, "PC2").rename(columns={"PC2_change": "PC2_change"})
+    fo_change = compute_prepost_change(df, "fo", scale=100).rename(columns={"fo_change": "fo_change"})
 
     sym_wide = (
         df.pivot_table(index="patient", columns="session", values=symptom_col)
@@ -339,13 +345,14 @@ def pc_change_predicts_next_symptoms(
 
     # merge (pc2_change is long, sym_wide is wide)
     d = pc2_change.merge(sym_wide[["patient", "s1", "s2", "s3"]], on="patient", how="inner")
+    d = d.merge(fo_change, on=["patient", "session"], how="left")
 
     # add covariates
     df_cov = df[["patient"] + covariates].drop_duplicates()
     d = d.merge(df_cov, on="patient", how="left")
 
     # essentials
-    d = d.dropna(subset=["PC2_change", "s1", "s2", "s3"] + covariates).copy()
+    d = d.dropna(subset=["PC2_change", "fo_change", "s1", "s2", "s3"] + covariates).copy()
     d["session"] = d["session"].astype(int)
 
     # outlier removal on PC2_change only (keep simple)
@@ -362,6 +369,7 @@ def pc_change_predicts_next_symptoms(
     )
     print(m_s1.summary())
 
+    
     # session 2->3
     d2 = d[d["session"] == 2].copy()
     d2["baseline_symptom"] = d2["s2"]
@@ -372,6 +380,37 @@ def pc_change_predicts_next_symptoms(
     model_type=model_type
     )
     print(m_s2.summary())
+
+    # session 2->3
+    d2 = d[d["session"] == 2].copy()
+    d2["baseline_symptom"] = d2["s2"]
+    m_s2_fo = fit_regression(
+    "s3 ~ fo_change + baseline_symptom + age + C(gender)",
+    data=d2,
+    robust=robust,
+    model_type=model_type
+    )
+    print(m_s2_fo.summary())
+
+    # session 2->3
+    d2 = d[d["session"] == 2].copy()
+    d2["baseline_symptom"] = d2["s2"]
+    m_s2_fo_pc = fit_regression(
+    "s3 ~ fo_change + PC2_change + baseline_symptom + age + C(gender)",
+    data=d2,
+    robust=robust,
+    model_type=model_type
+    )
+    print(m_s2_fo_pc.summary())
+
+    # F-test for whether adding PC2_change significantly improves fit
+    from statsmodels.stats.anova import anova_lm
+    anova_result = anova_lm(m_s2_fo, m_s2_fo_pc)
+    print(anova_result)
+
+    print("R² reduced:", m_s2_fo.rsquared)
+    print("R² full:", m_s2_fo_pc.rsquared)
+    print("ΔR²:", m_s2_fo_pc.rsquared - m_s2_fo.rsquared)
 
     # plot
     plot_symptom_change_correlation(d1, d2, m_s1, m_s2, fig_dir=fig_dir)
