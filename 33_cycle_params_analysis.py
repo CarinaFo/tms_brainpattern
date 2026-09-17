@@ -97,7 +97,8 @@ def fit_regression(formula, data, robust="HC3", model_type="ols"):
         raise ValueError("model_type must be 'ols' or 'rlm'")
 
 
-def analyse_cycle_params(n_states_level1: int, robust="HC3", model_type="ols"):
+def analyse_cycle_params(n_states_level1: int, robust="HC3", model_type="ols",
+                            remove_bipolar: bool = True):
 
     df_cycle = load_and_prep_data(n_states_level1)
 
@@ -110,7 +111,11 @@ def analyse_cycle_params(n_states_level1: int, robust="HC3", model_type="ols"):
         .copy()
     )
 
+    if remove_bipolar:
+        df_clean = df_clean[df_clean['group'] != 3]
+
     d0 = df_clean.query("session == 1 and tms == 'pre'").copy()
+
 
     m_rate = fit_regression(
         "np.log(cycle_rate) ~ hads_dep_total + age + C(gender)",
