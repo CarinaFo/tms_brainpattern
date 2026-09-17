@@ -10,7 +10,7 @@ import re
 from matplotlib.backends.backend_pdf import PdfPages
 
 # load latest csv file from RedCap
-df = pd.read_csv(r"C:\Users\CarinaF\Downloads\P3990PatientExperien_DATA_LABELS_2026-06-24_0922.csv")
+df = pd.read_csv(r"C:\Users\CarinaF\Downloads\P3990PatientExperien_DATA_LABELS_2026-09-16_1608.csv")
 
 # ID 225 is ID 224 (Record ID 25), Olivia told me on the 15th of January
 
@@ -552,11 +552,11 @@ display_df.index = [
 
 probabilities = [10, 30, 50, 70, 90]
 
-n_per_col = df_q18.sum(axis=0)  # N for each probability level
+n_per_col_18 = df_q18.sum(axis=0)  # N for each probability level
 
-proceed_pct = df_q18.loc["Probably proceed"] / n_per_col * 100
-not_proceed_pct = df_q18.loc["Probably not proceed"] / n_per_col * 100
-not_sure_pct = df_q18.loc["I'm not sure"] / n_per_col * 100
+proceed_pct = df_q18.loc["Probably proceed"] / n_per_col_18 * 100
+not_proceed_pct = df_q18.loc["Probably not proceed"] / n_per_col_18 * 100
+not_sure_pct = df_q18.loc["I'm not sure"] / n_per_col_18 * 100
 
 proceed = df_q18.loc["Probably proceed", :].values
 not_proceed = df_q18.loc["Probably not proceed", :].values
