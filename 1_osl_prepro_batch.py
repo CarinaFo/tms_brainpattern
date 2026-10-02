@@ -150,7 +150,7 @@ if __name__ == "__main__":
             - bad_segments: {segment_len: 500, picks: eeg, mode: diff, significance_level: 0.1, detect_zeros: False}
             - ica_raw: {n_components: 0.99, picks: 'eeg', l_freq: 1}
             - ica_autoreject: {apply: true, ecgmethod: None}
-            #- custom_ica: {apply: true, n_components: 30, picks: eeg} # mne wrapper for fastica
+            - custom_ica: {apply: true, n_components: 30, picks: eeg} # mne wrapper for fastica
             - interpolate_bads: {reset_bads: false} # keep information about bad channels in info # mne anonymous (runs mne function directly)
             - drop_channels: {ch_names: ['HEOG', 'ICA-VEOG', 'ICA-HEOG'], on_missing: 'ignore'} # mne anonymous
             - set_eeg_reference: {projection: true} # mne anonymous, average reference projection
